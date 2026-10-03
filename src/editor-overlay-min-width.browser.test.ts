@@ -68,7 +68,7 @@ describe("overlayMinWidth in the editor", () => {
 
   it("shows the control under Project → Display", async () => {
     const t = await mount();
-    // Behind two collapses: the Project section, then its Display group.
+    // In the Project tab, under Display.
     const ed = t.ed as unknown as { _projectOpen: boolean; _openGroups: Set<string> };
     ed._projectOpen = true;
     ed._openGroups = new Set(["Display"]);

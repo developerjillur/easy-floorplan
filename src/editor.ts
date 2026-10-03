@@ -476,7 +476,7 @@ export class FloorplanCardEditor extends LitElement {
      */
     priorHistory?: FloorplanCardConfig[];
   };
-  /** Project section expanded? Collapsed by default — page settings are touched rarely. */
+  /** Inspector destination: selection by default, or project-wide settings. */
   @state() private _projectOpen = false;
   /**
    * Which config groups are expanded, by title (issue #205).
@@ -493,7 +493,7 @@ export class FloorplanCardEditor extends LitElement {
    * Replaced rather than mutated on toggle — Lit compares by identity, and a
    * mutated Set is the same object.
    */
-  @state() private _openGroups: ReadonlySet<string> = new Set(["Shape", "Identity"]);
+  @state() private _openGroups: ReadonlySet<string> = new Set(["Shape", "Identity", "Zone", "Project"]);
   /**
    * Expanded (fullscreen) editing. HA renders the card config editor in a
    * narrow dialog (~480–560px), which is cramped for a visual canvas editor.
@@ -874,6 +874,11 @@ export class FloorplanCardEditor extends LitElement {
     if (this._pinchPts.size < 2) this._pinch = null;
   };
 
+  protected willUpdate(changed: PropertyValues): void {
+    // A fresh canvas selection should immediately show what can be edited.
+    if (changed.has("_selection") && this._selection.length) this._projectOpen = false;
+  }
+
   /**
    * Promote the expanded editor into the top layer. `position: fixed` alone is
    * not enough: HA's edit dialog puts a `transform` on its surface to offset
@@ -1211,6 +1216,9 @@ export class FloorplanCardEditor extends LitElement {
     // contained by the bubble-phase host listener (_onHostKeyDown) before
     // they can reach — and close — HA's dialog.
     if (isTypingPath(path)) return;
+    // Arrow/Home/End belong to the inspector tabs, not canvas nudging.
+    if (path.some((el) => el instanceof Element && el.getAttribute("role") === "tab") &&
+        ["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) return;
 
     const mod = ev.ctrlKey || ev.metaKey;
     const key = ev.key.toLowerCase();
@@ -2876,17 +2884,22 @@ export class FloorplanCardEditor extends LitElement {
    * hand-rolled, and they belong *inside* the group whose subject they share.
    */
   private _renderGroup(title: string, ...content: unknown[]): TemplateResult {
-    const open = this._openGroups.has(title);
+    const key = title === "Behaviour" ? "Behavior" : title;
+    const open = this._openGroups.has(key);
+    const label = ({
+      "What it reads": "Entities", Behavior: "Actions", Behaviour: "Actions",
+      Look: "Appearance", Project: "Canvas",
+    } as Record<string, string>)[title] ?? title;
     return html`
       <div class="cfg-group ${open ? "open" : ""}">
         <button
           class="cfg-group-title"
           type="button"
           aria-expanded=${open}
-          @click=${() => this._toggleGroup(title)}
+          @click=${() => this._toggleGroup(key)}
         >
           <ha-icon icon=${open ? "mdi:chevron-down" : "mdi:chevron-right"}></ha-icon>
-          <span>${title}</span>
+          <span>${label}</span>
         </button>
         ${open ? content : nothing}
       </div>
@@ -3585,7 +3598,8 @@ export class FloorplanCardEditor extends LitElement {
             >`
           : html`
               <span class="ctx-count">${n} selected</span>
-              <span class="ctx-hint">Edit properties in the inspector.</span>
+              <span class="ctx-hint ctx-inspector-hint">Edit properties in the inspector.</span>
+              <button class="inspector-jump" @click=${() => this._jumpToInspector()}>Edit selection</button>
             `;
     }
 
@@ -3775,11 +3789,12 @@ export class FloorplanCardEditor extends LitElement {
           <button
             class=${this._fullscreen ? "active expand-toggle" : "expand-toggle"}
             aria-pressed=${this._fullscreen}
+            aria-label=${this._fullscreen ? "Exit full screen" : "Expand"}
             title=${this._fullscreen ? "Exit full screen (Esc)" : "Edit full screen — more room for the canvas"}
             @click=${() => this._toggleFullscreen()}
           >
             <ha-icon icon=${this._fullscreen ? "mdi:fullscreen-exit" : "mdi:fullscreen"}></ha-icon>
-            ${this._fullscreen ? "Exit" : "Expand"}
+            <span class="expand-label">${this._fullscreen ? "Exit" : "Expand"}</span>
           </button>
 
           <!-- Apply: save the plan to the dashboard and keep editing (issue
@@ -4206,9 +4221,23 @@ export class FloorplanCardEditor extends LitElement {
           ${this._renderContextBar()}
         </div>
         <aside class="side" aria-label="Inspector">
-          <div class="inspector-heading"><span>Inspector</span><span class="inspector-count">${this._selection.length ? `${this._selection.length} selected` : "Nothing selected"}</span></div>
-          ${this._renderElementEdit()}
-          ${this._renderPanel()}
+          <div class="inspector-heading">
+            <div class="inspector-tabs" role="tablist" aria-label="Inspector" @keydown=${this._onInspectorTabKeyDown}>
+              <button id="selection-tab" role="tab" aria-selected=${!this._projectOpen}
+                aria-controls="selection-panel" tabindex=${this._projectOpen ? -1 : 0}
+                @click=${() => this._setInspector(false)}>Selection</button>
+              <button id="project-tab" role="tab" aria-selected=${this._projectOpen}
+                aria-controls="project-panel" tabindex=${this._projectOpen ? 0 : -1}
+                @click=${() => this._setInspector(true)}>Project</button>
+            </div>
+            <button class="canvas-jump" @click=${() => this._jumpToCanvas()}>Back to plan</button>
+          </div>
+          <div id="selection-panel" role="tabpanel" aria-labelledby="selection-tab" ?hidden=${this._projectOpen}>
+            ${this._projectOpen ? nothing : this._renderElementEdit()}
+          </div>
+          <div id="project-panel" role="tabpanel" aria-labelledby="project-tab" ?hidden=${!this._projectOpen}>
+            ${this._projectOpen ? this._renderPanel() : nothing}
+          </div>
         </aside>
         </div>
       </div>
@@ -4519,6 +4548,32 @@ export class FloorplanCardEditor extends LitElement {
     this._addQuery = "";
   }
 
+  private _setInspector(project: boolean): void {
+    this._projectOpen = project;
+    this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
+  }
+
+  private _onInspectorTabKeyDown = async (event: KeyboardEvent): Promise<void> => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const project = event.key === "Home" ? false : event.key === "End" ? true : !this._projectOpen;
+    this._setInspector(project);
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLButtonElement>(project ? "#project-tab" : "#selection-tab")?.focus();
+  };
+
+  private async _jumpToInspector(): Promise<void> {
+    this._setInspector(false);
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#selection-tab")?.focus({ preventScroll: true });
+    this.renderRoot.querySelector<HTMLElement>(".side")?.scrollIntoView({ block: "start" });
+  }
+
+  private _jumpToCanvas(): void {
+    this.renderRoot.querySelector<HTMLElement>(".canvas-wrap")?.focus({ preventScroll: true });
+    this.renderRoot.querySelector<HTMLElement>(".canvas-column")?.scrollIntoView({ block: "start" });
+  }
+
   /**
    * Save the card to the dashboard and stay in the editor (issue #198).
    *
@@ -4569,6 +4624,7 @@ export class FloorplanCardEditor extends LitElement {
 
     return html`
       <div class="pop left add-pop">
+        <div class="add-shortcuts">
         <button
           class="add-entry"
           @click=${() => {
@@ -4587,6 +4643,7 @@ export class FloorplanCardEditor extends LitElement {
         >
           <ha-icon icon="mdi:format-text"></ha-icon> Text
         </button>
+        </div>
         <div class="furn-search">
           <ha-icon icon="mdi:magnify"></ha-icon>
           <input
@@ -5516,26 +5573,9 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   private _renderPanel(): TemplateResult {
-    // Collapsed by default — page-level settings are touched rarely, and
-    // collapsing them keeps the Element editor close to the canvas.
     return html`
       <section class="panel">
-        <button
-          class="section-toggle"
-          aria-expanded=${this._projectOpen}
-          @click=${() => {
-            this._projectOpen = !this._projectOpen;
-          }}
-        >
-          <ha-icon icon=${this._projectOpen ? "mdi:chevron-down" : "mdi:chevron-right"}></ha-icon>
-          <span class="section-title-inline">Project</span>
-          ${this._projectOpen
-            ? nothing
-            : html`<span class="section-summary"
-                >${this._config.title || "Untitled"} · ${this._config.width}×${this._config.height}</span
-              >`}
-        </button>
-        ${this._projectOpen ? this._renderPanelBody() : nothing}
+        ${this._renderPanelBody()}
       </section>
     `;
   }
@@ -7854,38 +7894,6 @@ export class FloorplanCardEditor extends LitElement {
        exists to answer. */
     .edit-head button.on {
       color: var(--primary-color);
-    }
-    /* Collapsible Project section header. */
-    .section-toggle {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      width: 100%;
-      border: none;
-      background: none;
-      padding: 2px 0;
-      margin: 0;
-      cursor: pointer;
-      color: var(--secondary-text-color);
-      text-align: left;
-    }
-    .section-toggle ha-icon {
-      --mdc-icon-size: 16px;
-    }
-    .section-toggle .section-title-inline {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .section-toggle .section-summary {
-      font-size: 12px;
-      color: var(--secondary-text-color);
-      opacity: 0.8;
-      text-transform: none;
-    }
-    .panel-body {
-      margin-top: 10px;
     }
     /* Field rows flow into responsive columns so the below-canvas sections
        stay short at HA-dialog width (~700px fits two columns). Rows that

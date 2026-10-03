@@ -7,6 +7,9 @@ Run `npx vite --host 127.0.0.1 --port 5187` and open
 workspace with a sample two-floor home. Select and drag objects, edit their
 properties, use undo, switch floors, and expand the workspace. The theme button
 exercises the same Home Assistant CSS variables the editor uses in a dashboard.
+The Selection and Project tabs separate object properties from plan settings.
+On phones, Edit selection and Back to plan move directly between the two parts
+of the workspace, and all eight drawing tools remain visible.
 
 This renders the actual editor with its standalone input fallbacks. Changes
 stay in the page; Apply requires a Home Assistant dashboard. Native HA entity
@@ -16,13 +19,16 @@ The preview's MDI paths are from `@mdi/svg` 7.4.47; their license is beside
 
 ### Editor workspace screenshots
 
-The same sample home and selected stairs are shown in each capture. The
+The desktop and mobile comparisons show the same sample home and selected stairs. The
 [previous editor](../docs/img/editor-workspace-before.jpg) is a full-page
 capture of `main` at `5641e51`; its properties sit below the large canvas.
 The [desktop workspace](../docs/img/editor-workspace-preview.jpg) keeps the
 tools, fitted plan and inspector together within a 1280×720 viewport.
 On mobile, the [tools and canvas](../docs/img/editor-workspace-mobile.jpg)
 stack above the [inspector](../docs/img/editor-workspace-mobile-inspector.jpg).
+The [tablet layout](../docs/img/editor-workspace-tablet.jpg) keeps the inspector
+beside the plan with tools above both. The [landscape menu](../docs/img/editor-workspace-landscape.jpg)
+shows the furniture picker staying within a short fullscreen viewport.
 These demonstrate the standalone preview, not native Home Assistant forms.
 
 ## Home Assistant integration

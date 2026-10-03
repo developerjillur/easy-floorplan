@@ -41,19 +41,98 @@ describe("responsive editor workspace", () => {
     expect(t.rect(".stage").width).toBeLessThanOrEqual(t.el(".canvas-wrap").clientWidth + 1);
   });
 
-  it.each([360, 560, 900])("keeps controls and selected properties inside a %ipx editor", async (width) => {
+  it.each([320, 360, 560, 800])("keeps controls and selected properties inside a %ipx editor", async (width) => {
     const t = await mount(width);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
     expect(t.rect(".tool-rail").bottom).toBeLessThanOrEqual(t.rect(".canvas-column").top + 1);
     expect(t.rect(".canvas-column").bottom).toBeLessThanOrEqual(t.rect(".side").top + 1);
     expect(t.rect(".side").width).toBeLessThanOrEqual(width);
+    // Every drawing tool stays visible, including the last tools on phones.
+    for (const button of t.root.querySelectorAll<HTMLElement>(".tool-rail button, .toolbar button, .canvas-heading button, .canvas-heading select")) {
+      const r = button.getBoundingClientRect();
+      expect(r.left).toBeGreaterThanOrEqual(t.rect(".editor").left);
+      expect(r.right).toBeLessThanOrEqual(t.rect(".editor").right);
+    }
     for (const input of t.root.querySelectorAll<HTMLElement>(".side input, .side select")) {
       const r = input.getBoundingClientRect();
       expect(r.left).toBeGreaterThanOrEqual(t.rect(".side").left);
       expect(r.right).toBeLessThanOrEqual(t.rect(".side").right);
       expect(r.width).toBeGreaterThan(40);
     }
+  });
+
+  it.each([842, 900, 999])("keeps plan and properties together at the %ipx tablet width", async (width) => {
+    const t = await mount(width);
+    expect(t.rect(".tool-rail").bottom).toBeLessThanOrEqual(t.rect(".canvas-column").top + 1);
+    expect(t.rect(".canvas-column").right).toBeLessThanOrEqual(t.rect(".side").left + 1);
+    expect(t.rect(".canvas-wrap").width).toBeGreaterThan(490);
+    expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
+    expect(t.rect(".stage").width).toBeLessThanOrEqual(t.el(".canvas-wrap").clientWidth + 1);
+  });
+
+  it("opens project fields directly and switches tabs without moving the selected element", async () => {
+    const t = await mount(1300);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    const emitted: unknown[] = [];
+    t.editor.addEventListener("config-changed", (event) => emitted.push(event));
+    const selection = t.el("#selection-tab");
+    selection.focus();
+    selection.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, composed: true }));
+    await settle(t.editor);
+    expect(t.el("#project-tab").getAttribute("aria-selected")).toBe("true");
+    expect(t.root.activeElement).toBe(t.el("#project-tab"));
+    expect(t.root.querySelector("#field-title")).not.toBeNull();
+    expect(t.el("#selection-panel").hidden).toBe(true);
+    t.el("#project-tab").dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, composed: true }));
+    await settle(t.editor);
+    expect(t.root.activeElement).toBe(selection);
+    expect(t.root.querySelector<HTMLInputElement>("#field-w")?.value).toBe("180");
+    expect(emitted).toEqual([]);
+  });
+
+  it("returns to the selection inspector when a different canvas object is selected", async () => {
+    const t = await mount(1300);
+    t.el("#project-tab").click();
+    await settle(t.editor);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    expect(t.el("#selection-tab").getAttribute("aria-selected")).toBe("true");
+    expect(t.root.querySelector("#field-w")).not.toBeNull();
+  });
+
+  it("provides direct mobile jumps between the selection and plan", async () => {
+    const t = await mount(360);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    expect(t.root.activeElement).toBe(t.el("#selection-tab"));
+    t.el(".canvas-jump").click();
+    await settle(t.editor);
+    expect(t.root.activeElement).toBe(t.el(".canvas-wrap"));
+  });
+
+  it("contains long project and floor names without hiding document actions", async () => {
+    const t = await mount(320);
+    const c = config();
+    c.title = "A long project title that should never hide Apply or Expand";
+    c.floors![0].name = "A long ground floor name that should stay inside its picker";
+    t.editor.setConfig(c);
+    await settle(t.editor);
+    expect(t.el(".editor").scrollWidth).toBeLessThanOrEqual(t.el(".editor").clientWidth);
+    expect(t.rect(".apply-btn").right).toBeLessThanOrEqual(t.rect(".editor").right);
+  });
+
+  it.each([286, 320, 560])("fits a landscape plan in a %ipx editor without page overflow", async (width) => {
+    const t = await mount(width);
+    t.editor.setConfig({ ...config(), height: 720 });
+    await settle(t.editor);
+    expect(t.el(".editor").scrollWidth).toBeLessThanOrEqual(t.el(".editor").clientWidth);
+    expect(t.rect(".stage").width).toBeLessThanOrEqual(t.el(".canvas-wrap").clientWidth + 1);
+    expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
+    if (width < 400) expect(t.rect(".apply-btn").top).toBeCloseTo(t.rect(".expand-toggle").top, 0);
   });
 
   it("preserves manual zoom on resize and refits when requested", async () => {
@@ -74,12 +153,14 @@ describe("responsive editor workspace", () => {
     expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
   });
 
-  it("keeps the insert menu inside a narrow editor", async () => {
-    const t = await mount(360);
+  it.each([286, 360, 560, 640, 842, 900, 1300])("keeps the insert menu inside a %ipx editor", async (width) => {
+    const t = await mount(width);
     t.root.querySelector<HTMLButtonElement>('.toolbar button[aria-haspopup="true"]')!.click();
     await settle(t.editor);
     expect(t.rect(".add-pop").left).toBeGreaterThanOrEqual(t.rect(".editor").left);
     expect(t.rect(".add-pop").right).toBeLessThanOrEqual(t.rect(".editor").right);
+    expect(t.rect(".add-pop").height).toBeLessThanOrEqual(window.innerHeight - 100);
+    expect(t.rect(".furn-cell svg").height).toBeGreaterThanOrEqual(30);
   });
 
   it("refits changed plan dimensions and can zoom out from below 50%", async () => {
