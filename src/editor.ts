@@ -161,6 +161,7 @@ import {
   attachedCorners,
   elementsAtPoint,
   cyclePick,
+  findElement,
   isLocked,
   movableSelection,
   elementsInRect,
@@ -478,6 +479,8 @@ export class FloorplanCardEditor extends LitElement {
   };
   /** Inspector destination: selection by default, or project-wide settings. */
   @state() private _projectOpen = false;
+  @state() private _advancedSelection = false;
+  @state() private _mobileInspector = false;
   /**
    * Which config groups are expanded, by title (issue #205).
    *
@@ -876,7 +879,15 @@ export class FloorplanCardEditor extends LitElement {
 
   protected willUpdate(changed: PropertyValues): void {
     // A fresh canvas selection should immediately show what can be edited.
-    if (changed.has("_selection") && this._selection.length) this._projectOpen = false;
+    if (changed.has("_selection")) {
+      const previous = (changed.get("_selection") as Sel[] | undefined) ?? [];
+      const identity = (selection: Sel[]) => selection.map((s) => `${s.kind}:${s.id}`).join(",");
+      if (identity(previous) !== identity(this._selection)) {
+        this._advancedSelection = false;
+        if (this._selection.length) this._projectOpen = false;
+        else if (previous.length && !this._projectOpen) this._mobileInspector = false;
+      }
+    }
   }
 
   /**
@@ -1120,8 +1131,7 @@ export class FloorplanCardEditor extends LitElement {
     this._future = [structuredClone(this._config), ...this._future];
     const prev = this._history[this._history.length - 1];
     this._history = this._history.slice(0, -1);
-    this._selection = [];
-    this._emit(prev);
+    this._restoreHistory(prev);
   }
 
   private _redo(): void {
@@ -1130,8 +1140,14 @@ export class FloorplanCardEditor extends LitElement {
     this._history = [...this._history, structuredClone(this._config)];
     const next = this._future[0];
     this._future = this._future.slice(1);
-    this._selection = [];
-    this._emit(next);
+    this._restoreHistory(next);
+  }
+
+  /** Keep property edits in context, but never retain an object removed by undo. */
+  private _restoreHistory(config: FloorplanCardConfig): void {
+    const floor = config.floors?.find((f) => f.id === this._activeFloorId);
+    this._selection = floor ? this._selection.filter((s) => findElement(floor, s)) : [];
+    this._emit(config);
   }
 
   // ---- selection ----------------------------------------------------------
@@ -3499,7 +3515,7 @@ export class FloorplanCardEditor extends LitElement {
       body = html`
         <span class="ctx-hint"
           >Drag on the canvas to draw the tracked area; bind one or two
-          distance sensors in the Element editor.</span
+          distance sensors in its properties.</span
         >
       `;
     } else if (t === "area") {
@@ -3597,9 +3613,8 @@ export class FloorplanCardEditor extends LitElement {
               >Click an element to select it, or drag a box to select several.</span
             >`
           : html`
-              <span class="ctx-count">${n} selected</span>
-              <span class="ctx-hint ctx-inspector-hint">Edit properties in the inspector.</span>
-              <button class="inspector-jump" @click=${() => this._jumpToInspector()}>Edit selection</button>
+              <span class="ctx-count">${n === 1 ? this._selectionSummary(this._selection[0]) : `${n} selected`}</span>
+              <button class="inspector-jump" @click=${() => this._jumpToInspector()}>Edit properties <span aria-hidden="true">→</span></button>
             `;
     }
 
@@ -3621,37 +3636,15 @@ export class FloorplanCardEditor extends LitElement {
   private _renderSnapControl(): TemplateResult {
     const mode = this._snapMode;
     const customPercent = snapToGridPercent(this._config.snap as number, this.grid);
-    const opts: { id: "grid" | "off" | "custom"; label: string }[] = [
-      { id: "grid", label: "On" },
-      { id: "off", label: "Off" },
-      { id: "custom", label: "Custom" },
-    ];
-    const hint =
-      mode === "grid"
-        ? `Snapping to the ${this.grid}-unit grid.`
-        : mode === "off"
-          ? "No snapping — free placement."
-          : `Snap = ${customPercent}% of grid (${this._resolvedSnap} units).`;
     return html`
-      <span class="ctx-field-label">Snap</span>
-      <div class="seg" role="group" aria-label="Snap mode">
-        ${opts.map(
-          (o) => html`
-            <button
-              class=${mode === o.id ? "active" : ""}
-              aria-pressed=${mode === o.id}
-              title=${o.id === "grid"
-                ? "Snap to the grid"
-                : o.id === "off"
-                  ? "Free placement"
-                  : "Custom step (% of grid)"}
-              @click=${() => this._setSnapMode(o.id)}
-            >
-              ${o.label}
-            </button>
-          `
-        )}
-      </div>
+      <label class="snap-control">Snap
+        <select aria-label="Snapping" .value=${mode}
+          @change=${(event: Event) => this._setSnapMode((event.target as HTMLSelectElement).value as "grid" | "off" | "custom")}>
+          <option value="grid">Grid</option>
+          <option value="off">Off</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
       ${mode === "custom"
         ? html`<input
               class="num"
@@ -3669,7 +3662,6 @@ export class FloorplanCardEditor extends LitElement {
               }}
             /><span class="ctx-field-label">%</span>`
         : nothing}
-      <span class="ctx-hint">${hint}</span>
     `;
   }
 
@@ -3737,7 +3729,7 @@ export class FloorplanCardEditor extends LitElement {
       !(floor.areas ?? []).length;
     return html`
       <div
-        class="editor ${this._fullscreen ? "fullscreen" : ""}"
+        class="editor ${this._fullscreen ? "fullscreen" : ""} ${this._mobileInspector ? "show-inspector" : ""}"
         popover=${this._fullscreen ? "manual" : nothing}
         @pointerdown=${this._onEditorPointerDown}
       >
@@ -3754,11 +3746,12 @@ export class FloorplanCardEditor extends LitElement {
         <div class="toolbar">
           <div class="editor-brand">
             <ha-icon icon="mdi:floor-plan"></ha-icon>
-            <div><span class="editor-eyebrow">Easy Floorplan</span>
-              <strong>${c.title || "Untitled plan"}</strong></div>
+            <strong>${c.title || "Untitled plan"}</strong>
+            <button class="project-settings" aria-label="Project settings" title="Project settings"
+              @click=${() => this._jumpToInspector(true)}><ha-icon icon="mdi:cog-outline"></ha-icon></button>
           </div>
           <!-- History -->
-          <div class="group">
+          <div class="group history">
             <button aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" ?disabled=${!this._history.length} @click=${this._undo}>
               <ha-icon icon="mdi:undo"></ha-icon>
             </button>
@@ -3767,8 +3760,17 @@ export class FloorplanCardEditor extends LitElement {
             </button>
           </div>
 
+          <label class="tool-compact">
+            <ha-icon icon=${TOOL_META[this._tool].icon}></ha-icon>
+            <select aria-label="Drawing tool" .value=${this._tool}
+              @change=${(event: Event) => this._chooseTool((event.target as HTMLSelectElement).value as Tool)}>
+              ${(["select", "wall", "door", "passage", "window", "skylight", "tracker", "area"] as Tool[]).map((tool) =>
+                html`<option value=${tool}>${TOOL_META[tool].label}</option>`)}
+            </select>
+          </label>
+
           <!-- Insert — one popover for everything droppable on the floor -->
-          <span class="pop-wrap">
+          <span class="pop-wrap insert-menu">
             <button
               aria-haspopup="true"
               aria-expanded=${this._addMenuOpen}
@@ -3834,17 +3836,7 @@ export class FloorplanCardEditor extends LitElement {
                   class=${this._tool === t ? "active" : ""}
                   aria-pressed=${this._tool === t}
                   title=${TOOL_META[t].label}
-                  @click=${() => {
-                    this._tool = t;
-                    this._draft = null;
-                    this._draftTracker = null;
-                    this._draftArea = null;
-                    this._areaHover = null;
-                    this._areaDragStart = null;
-                    this._areaDragCurrent = null;
-                    this._clearAreaDragTimer();
-                    this._areaDragMoved = false;
-                  }}
+                  @click=${() => this._chooseTool(t)}
                 >
                   <ha-icon icon=${TOOL_META[t].icon}></ha-icon><span>${TOOL_META[t].label}</span>
                 </button>`
@@ -4283,6 +4275,22 @@ export class FloorplanCardEditor extends LitElement {
     return html`${spec.fields.map((f) => this._renderFallbackField(spec, f, apply))}`;
   }
 
+  private _renderEssentialForm(
+    spec: FormSpec,
+    names: readonly string[],
+    apply: (patch: Record<string, unknown>, live: boolean) => void
+  ): TemplateResult {
+    return html`<div class="essential-fields">
+      ${formSlice(spec, names).fields.map((field) => {
+        const number = field.selector.number as Record<string, unknown> | undefined;
+        const compact = number ? { ...field, selector: { number: { ...number, mode: "box" } } } : field;
+        return html`<div class=${number ? "essential-field" : "essential-field full"}>
+          ${this._renderForm({ ...spec, fields: [compact] }, apply)}
+        </div>`;
+      })}
+    </div>`;
+  }
+
   private _applyFallback(
     spec: FormSpec,
     field: FormField,
@@ -4548,6 +4556,19 @@ export class FloorplanCardEditor extends LitElement {
     this._addQuery = "";
   }
 
+  private _chooseTool(tool: Tool): void {
+    this._tool = tool;
+    this._mobileInspector = false;
+    this._draft = null;
+    this._draftTracker = null;
+    this._draftArea = null;
+    this._areaHover = null;
+    this._areaDragStart = null;
+    this._areaDragCurrent = null;
+    this._clearAreaDragTimer();
+    this._areaDragMoved = false;
+  }
+
   private _setInspector(project: boolean): void {
     this._projectOpen = project;
     this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
@@ -4562,16 +4583,24 @@ export class FloorplanCardEditor extends LitElement {
     this.renderRoot.querySelector<HTMLButtonElement>(project ? "#project-tab" : "#selection-tab")?.focus();
   };
 
-  private async _jumpToInspector(): Promise<void> {
-    this._setInspector(false);
+  private async _jumpToInspector(project = false): Promise<void> {
+    this._setInspector(project);
+    this._mobileInspector = true;
     await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>("#selection-tab")?.focus({ preventScroll: true });
-    this.renderRoot.querySelector<HTMLElement>(".side")?.scrollIntoView({ block: "start" });
+    this.renderRoot.querySelector<HTMLElement>(project ? "#project-tab" : "#selection-tab")?.focus({ preventScroll: true });
   }
 
-  private _jumpToCanvas(): void {
-    this.renderRoot.querySelector<HTMLElement>(".canvas-wrap")?.focus({ preventScroll: true });
-    this.renderRoot.querySelector<HTMLElement>(".canvas-column")?.scrollIntoView({ block: "start" });
+  private async _jumpToCanvas(): Promise<void> {
+    this._mobileInspector = false;
+    await this.updateComplete;
+    this._canvasWrap?.focus({ preventScroll: true });
+  }
+
+  private async _showAdvanced(advanced: boolean): Promise<void> {
+    this._advancedSelection = advanced;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(advanced ? ".back-to-essentials" : ".more-settings")?.focus({ preventScroll: true });
+    this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
   }
 
   /**
@@ -4719,7 +4748,7 @@ export class FloorplanCardEditor extends LitElement {
         <section class="edit-area">
           <div class="inspector-empty">
             <ha-icon icon="mdi:cursor-default-outline"></ha-icon>
-            <strong>Make it your own</strong>
+            <strong>Select an object</strong>
             <p>Select a wall, room or object to edit its properties.</p>
             <span>Drag a box to select several.</span>
           </div>
@@ -4771,8 +4800,13 @@ export class FloorplanCardEditor extends LitElement {
           ? html`<p class="hint">
               Edit elements one at a time. Drag any selected element to move the whole group.
             </p>`
-          : html`${this._renderAreaScopeHint()}
-              <div class="rows">${this._renderSelectionEditor()}</div>`}
+          : html`
+              ${this._advancedSelection ? html`<button class="back-to-essentials" @click=${() => this._showAdvanced(false)}>← Back to essentials</button>` : nothing}
+              ${this._renderAreaScopeHint()}
+              <div class="rows ${this._advancedSelection ? "advanced-properties" : "essential-properties"}">${this._renderSelectionEditor()}</div>
+              ${!this._advancedSelection && sel.kind !== "wall" && sel.kind !== "text"
+                ? html`<button class="more-settings" @click=${() => this._showAdvanced(true)}>More settings <span aria-hidden="true">→</span></button>`
+                : nothing}`}
       </section>
     `;
   }
@@ -6118,8 +6152,7 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   /**
-   * Editor fields for the currently-selected element, rendered in the Element
-   * section below the canvas (docked beside it in fullscreen). Returns nothing
+   * Essential or advanced fields for the currently-selected element. Returns nothing
    * when the selection isn't exactly one element — multi-select and
    * empty-select states are handled by the Element header itself.
    */
@@ -6149,6 +6182,9 @@ export class FloorplanCardEditor extends LitElement {
         }
         this._applyElementPatch("opening", o.id, patch, live);
       };
+      if (!this._advancedSelection) return html`
+        ${this._renderEssentialForm(spec, ["length", "width", "angle", "hinge", "opens", "slide", "entity"], apply)}
+      `;
       /** A group, skipped when this opening has none of its fields. */
       const group = (title: string, names: readonly string[], ...extra: unknown[]) => {
         const slice = formSlice(spec, names);
@@ -6243,6 +6279,13 @@ export class FloorplanCardEditor extends LitElement {
         }
         this._applyElementPatch("item", it.id, patch, live);
       };
+      if (!this._advancedSelection) return html`
+        ${this._renderEssentialForm(itemEntityForm(it, areaEntities), ["entity"], apply)}
+        ${this._renderEssentialForm(itemIdentityForm(it), ["name", "showName"], apply)}
+        ${this._renderEssentialForm(itemShowStateForm(it), ["showState"], apply)}
+        ${this._renderEssentialForm(itemBadgeForm(it), ["size", "angle"], apply)}
+        ${this._renderItemIconRow(it)}
+      `;
       const entityState = it.entity ? this.hass?.states[it.entity] : undefined;
       const effects = itemEffectsForm(it, deviceClass, entityState);
       return html`
@@ -6339,7 +6382,7 @@ export class FloorplanCardEditor extends LitElement {
       const t = this._floor().texts.find((x) => x.id === sel.id);
       if (!t) return html`${nothing}`;
       return html`
-        ${this._renderForm(textForm(t, this._areaEntitiesAt(t.x, t.y)), (patch, live) =>
+        ${this._renderEssentialForm(textForm(t, this._areaEntitiesAt(t.x, t.y)), ["text", "entity", "attribute", "size", "angle"], (patch, live) =>
           this._applyElementPatch("text", t.id, patch, live)
         )}
         ${this._renderColorRow({
@@ -6359,6 +6402,14 @@ export class FloorplanCardEditor extends LitElement {
       const fSpec = furnitureForm(f, this._areaEntitiesAt(f.x, f.y), this._symbols());
       const fApply = (patch: Record<string, unknown>, live: boolean) =>
         this._applyElementPatch("furniture", f.id, patch, live);
+      if (!this._advancedSelection) return html`
+        ${this._renderEssentialForm(fSpec, ["w", "h", "angle", "hand", ...(f.type === "stairs" || f.goToFloor ? ["goToFloor"] : [])], fApply)}
+        ${this._renderColorRow({
+          label: "Color", value: f.color, swatch: "#9e9e9e", placeholder: "Default",
+          onLive: (color) => this._updateFurnitureLive(f.id, { color }),
+          onCommit: (color) => this._updateFurniture(f.id, { color }),
+        })}
+      `;
       return html`
         ${FloorplanCardEditor.FURNITURE_GROUPS.map(([title, names]) =>
           this._renderGroup(title, this._renderForm(formSlice(fSpec, names), fApply))
@@ -6402,6 +6453,17 @@ export class FloorplanCardEditor extends LitElement {
       const aSpec = areaForm(a);
       const aApply = (patch: Record<string, unknown>, live: boolean) =>
         this._applyElementPatch("area", a.id, patch, live);
+      if (!this._advancedSelection) return html`
+        ${this._renderEssentialForm(areaNameForm(a, haAreas.map((ha) => ha.name)), ["name"], (patch, live) =>
+          this._applyElementPatch("area", a.id, areaNamePatch(patch, haAreas), live))}
+        ${this._renderAreaLinkRow(a, haAreas)}
+        ${this._renderEssentialForm(aSpec, ["showName", "labelSize", "opacity"], aApply)}
+        ${this._renderColorRow({
+          label: "Fill color", value: a.color, swatch: "#03a9f4", placeholder: "Default",
+          onLive: (color) => this._updateAreaLive(a.id, { color }),
+          onCommit: (color) => this._updateArea(a.id, { color }),
+        })}
+      `;
       return html`
         ${this._renderGroup(
           // The name doubles as the HA-area link, so the link status line and
@@ -6517,6 +6579,11 @@ export class FloorplanCardEditor extends LitElement {
       const trSpec = trackerForm(tr);
       const trApply = (patch: Record<string, unknown>, live: boolean) =>
         this._applyElementPatch("tracker", tr.id, patch, live);
+      if (!this._advancedSelection) return html`
+        ${this._renderEssentialForm(trSpec, ["w", "h", "angle"], trApply)}
+        ${this._renderTrackerSensorRows(tr, "xSensor", "X sensor")}
+        ${this._renderTrackerSensorRows(tr, "ySensor", "Y sensor")}
+      `;
       return html`
         ${this._renderGroup(
           "Zone",
@@ -6550,7 +6617,7 @@ export class FloorplanCardEditor extends LitElement {
       if (!w) return html`${nothing}`;
       const length = Math.round(Math.hypot(w.x2 - w.x1, w.y2 - w.y1));
       return html`
-        ${this._renderForm(wallForm(w), (patch, live) =>
+        ${this._renderEssentialForm(wallForm(w), ["x1", "y1", "x2", "y2", "thickness", "kind"], (patch, live) =>
           this._applyElementPatch("wall", w.id, patch, live)
         )}
         <div class="row">

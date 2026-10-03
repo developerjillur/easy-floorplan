@@ -8,8 +8,14 @@ workspace with a sample two-floor home. Select and drag objects, edit their
 properties, use undo, switch floors, and expand the workspace. The theme button
 exercises the same Home Assistant CSS variables the editor uses in a dashboard.
 The Selection and Project tabs separate object properties from plan settings.
-On phones, Edit selection and Back to plan move directly between the two parts
-of the workspace, and all eight drawing tools remain visible.
+Selecting an object shows its essential fields directly; More settings opens the
+advanced controls, with a direct route back. Stair navigation is available beside
+its dimensions and color. Undo keeps an existing object selected.
+
+On phones, Edit properties replaces the drawing with the inspector in the same
+workspace. Back to plan preserves the selection and manual zoom. A compact
+Drawing tool picker offers all eight modes; Project settings, undo/redo and Apply
+remain accessible. Wider layouts show the plan and inspector together.
 
 This renders the actual editor with its standalone input fallbacks. Changes
 stay in the page; Apply requires a Home Assistant dashboard. Native HA entity
@@ -24,8 +30,9 @@ The desktop and mobile comparisons show the same sample home and selected stairs
 capture of `main` at `5641e51`; its properties sit below the large canvas.
 The [desktop workspace](../docs/img/editor-workspace-preview.jpg) keeps the
 tools, fitted plan and inspector together within a 1280×720 viewport.
-On mobile, the [tools and canvas](../docs/img/editor-workspace-mobile.jpg)
-stack above the [inspector](../docs/img/editor-workspace-mobile-inspector.jpg).
+On mobile, the [drawing workspace](../docs/img/editor-workspace-mobile.jpg)
+switches to the [property workspace](../docs/img/editor-workspace-mobile-inspector.jpg)
+without scrolling below the plan; both captures are 375×812.
 The [tablet layout](../docs/img/editor-workspace-tablet.jpg) keeps the inspector
 beside the plan with tools above both. The [landscape menu](../docs/img/editor-workspace-landscape.jpg)
 shows the furniture picker staying within a short fullscreen viewport.

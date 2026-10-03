@@ -58,6 +58,8 @@ async function mountWithItemSelected() {
   await ed.updateComplete;
 
   const root = () => ed.shadowRoot!;
+  root().querySelector<HTMLButtonElement>(".more-settings")!.click();
+  await ed.updateComplete;
   const group = [...root().querySelectorAll<HTMLButtonElement>("button.cfg-group-title")].find(
     (b) => b.textContent?.trim().startsWith("Visibility")
   )!;
