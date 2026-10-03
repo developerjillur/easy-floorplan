@@ -1,5 +1,5 @@
 /** A standalone architectural drawing, built from config rather than the live DOM. */
-import { nothing, render, svg, type SVGTemplateResult } from "lit";
+import { nothing, render, svg } from "lit";
 import { cssNumber } from "./css-safe";
 import { rectAreaSideWalls } from "./editor-geometry";
 import {
@@ -8,47 +8,23 @@ import {
   rotatePlanPoint, wallThickness, type OpeningStyle, type PlanRotation,
 } from "./render";
 import {
-  elevate, elevationShift, furnitureSolid, FURNITURE_HEIGHT_FRACTION,
+  elevationShift, furnitureSolid, FURNITURE_HEIGHT_FRACTION,
   normalizeProjection, normalizeWallHeight, planProjectionTransform, projectPlanPoint,
   projectedCanvasSize, renderIsoSolids, wallSolids, type DisplayFrame, type IsoSolid,
-  type Pt,
 } from "./projection";
 import { openingSolids } from "./projection-openings";
+import { solidEdges } from "./line-art";
 import { symbolCatalog } from "./symbols";
 import { DEFAULT_HEIGHT, DEFAULT_WIDTH, type Floor, type FloorplanCardConfig, type Opening } from "./types";
 
 const INK = "#222222";
 const PAPER = "#ffffff";
-const fmt = (n: number) => String(Math.round(n * 1000) / 1000);
-const path = (a: Pt, b: Pt) => `M${fmt(a.x)} ${fmt(a.y)}L${fmt(b.x)} ${fmt(b.y)}`;
 
 // Export a stable drawing convention: swing doors open, windows closed. Entity
 // values, replay time, and an opening midway through an animation are irrelevant.
 const openingStyle = (o: Opening): OpeningStyle => ({
   color: INK, accent: INK, open: openingDefaultOpen(o),
 });
-
-/** Real edges only: outlining each wall chunk would turn a wall into a ladder. */
-function solidEdges(s: IsoSolid): SVGTemplateResult | typeof nothing {
-  if (s.base.length < 3) return nothing;
-  const n = s.base.length;
-  const center = s.base.reduce((p, q) => ({ x: p.x + q.x / n, y: p.y + q.y / n }), { x: 0, y: 0 });
-  const lines: string[] = [];
-  for (let i = 0; i < n; i++) {
-    if (s.hiddenEdges?.includes(i)) continue;
-    const a = s.base[i], b = s.base[(i + 1) % n];
-    const topA = elevate(a, s.z1), topB = elevate(b, s.z1);
-    lines.push(path(topA, topB));
-    let nx = b.y - a.y, ny = a.x - b.x;
-    if (nx * (center.x - a.x) + ny * (center.y - a.y) > 0) { nx = -nx; ny = -ny; }
-    if (nx + ny <= 0) continue;
-    const bottomA = elevate(a, s.z0), bottomB = elevate(b, s.z0);
-    lines.push(path(bottomA, bottomB));
-    if (!s.hiddenEdges?.includes((i + n - 1) % n)) lines.push(path(bottomA, topA));
-    if (!s.hiddenEdges?.includes((i + 1) % n)) lines.push(path(bottomB, topB));
-  }
-  return svg`<path class="solid-edges" d=${lines.join(" ")} fill="none" stroke=${INK} stroke-width="1" />`;
-}
 
 export interface LineArtExport {
   svg: string;
