@@ -1,5 +1,32 @@
 # Developing against a real Home Assistant
 
+## Standalone editor preview
+
+Run `npx vite --host 127.0.0.1 --port 5187` and open
+<http://127.0.0.1:5187/docker/editor-preview.html> to try the responsive editor
+workspace with a sample two-floor home. Select and drag objects, edit their
+properties, use undo, switch floors, and expand the workspace. The theme button
+exercises the same Home Assistant CSS variables the editor uses in a dashboard.
+
+This renders the actual editor with its standalone input fallbacks. Changes
+stay in the page; Apply requires a Home Assistant dashboard. Native HA entity
+and action selectors should still be checked using the container below.
+The preview's MDI paths are from `@mdi/svg` 7.4.47; their license is beside
+`editor-preview-icons.json`. Production continues to use HA's `ha-icon`.
+
+### Editor workspace screenshots
+
+The same sample home and selected stairs are shown in each capture. The
+[previous editor](../docs/img/editor-workspace-before.jpg) is a full-page
+capture of `main` at `5641e51`; its properties sit below the large canvas.
+The [desktop workspace](../docs/img/editor-workspace-preview.jpg) keeps the
+tools, fitted plan and inspector together within a 1280×720 viewport.
+On mobile, the [tools and canvas](../docs/img/editor-workspace-mobile.jpg)
+stack above the [inspector](../docs/img/editor-workspace-mobile-inspector.jpg).
+These demonstrate the standalone preview, not native Home Assistant forms.
+
+## Home Assistant integration
+
 A throwaway Home Assistant in a container, preloaded with a sample floorplan
 and entities that keep changing, so the card can be developed against the real
 thing rather than a mock.

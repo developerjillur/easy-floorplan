@@ -1,5 +1,6 @@
 import { LitElement, html, css, svg, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state, query } from "lit/decorators.js";
+import { editorWorkspaceStyles } from "./editor-workspace-styles";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import type {
@@ -480,9 +481,8 @@ export class FloorplanCardEditor extends LitElement {
   /**
    * Which config groups are expanded, by title (issue #205).
    *
-   * Every group starts collapsed, so selecting a device shows its eight
-   * headings rather than two dozen controls, and the thing you came for is one
-   * click away instead of a scroll away.
+   * Shape and identity start open so a new selection has useful controls.
+   * Other groups stay one click away, without overwhelming the inspector.
    *
    * Keyed by title alone, deliberately: the titles are the panels' shared
    * vocabulary — "Color" means the same thing on a room, a device and a
@@ -493,7 +493,7 @@ export class FloorplanCardEditor extends LitElement {
    * Replaced rather than mutated on toggle — Lit compares by identity, and a
    * mutated Set is the same object.
    */
-  @state() private _openGroups: ReadonlySet<string> = new Set();
+  @state() private _openGroups: ReadonlySet<string> = new Set(["Shape", "Identity"]);
   /**
    * Expanded (fullscreen) editing. HA renders the card config editor in a
    * narrow dialog (~480–560px), which is cramped for a visual canvas editor.
@@ -514,6 +514,8 @@ export class FloorplanCardEditor extends LitElement {
   @query(".editor") private _editorEl?: HTMLElement;
   @query("svg") private _svg?: SVGSVGElement;
   @query(".canvas-wrap") private _canvasWrap?: HTMLElement;
+  private _canvasResize?: ResizeObserver;
+  private _fitToViewport = true;
 
   private _drag: Drag | null = null;
   /**
@@ -589,6 +591,7 @@ export class FloorplanCardEditor extends LitElement {
 
   public connectedCallback(): void {
     super.connectedCallback();
+    if (this._canvasWrap) this._canvasResize?.observe(this._canvasWrap);
     // Capture phase so HA's dialog can't swallow the arrow keys before we see them.
     window.addEventListener("keydown", this._onKeyDown, true);
     // Bubble phase on the host: fires only after the editor's own form
@@ -611,6 +614,7 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   public disconnectedCallback(): void {
+    this._canvasResize?.disconnect();
     window.removeEventListener("keydown", this._onKeyDown, true);
     this.removeEventListener("keydown", this._onHostKeyDown);
     window.removeEventListener("focusin", this._onFocusIn);
@@ -768,6 +772,12 @@ export class FloorplanCardEditor extends LitElement {
 
   protected firstUpdated(): void {
     void this._ensureHaComponents();
+    if (this._canvasWrap && typeof ResizeObserver !== "undefined") {
+      this._canvasResize = new ResizeObserver(() => {
+        if (this._fitToViewport && this._gesturePointer === null) this._fitView();
+      });
+      this._canvasResize.observe(this._canvasWrap);
+    }
     // Upgrade the plain-input fallbacks in place whenever a component gets
     // defined later (by us or by another editor the user opened).
     for (const tag of [
@@ -873,7 +883,12 @@ export class FloorplanCardEditor extends LitElement {
    * hides the popover on its own. Browsers without the API keep the fixed
    * fallback, which is already correct on the mobile dialog (transform: none).
    */
-  protected updated(): void {
+  protected updated(changed: PropertyValues): void {
+    const previous = changed.get("_config") as FloorplanCardConfig | undefined;
+    if (previous && this._fitToViewport &&
+        (previous.width !== this._config.width || previous.height !== this._config.height)) {
+      this._fitView();
+    }
     // Re-asserted on every render while fullscreen (not just the transition):
     // idempotent via :popover-open, and it self-heals if the browser
     // force-hid the popover, e.g. across a disconnect/reconnect.
@@ -2848,9 +2863,8 @@ export class FloorplanCardEditor extends LitElement {
    * in. Grouping them costs a heading and a hairline each; what it buys is
    * that "where do I set the label position" has an answer you can guess.
    *
-   * The heading is a disclosure button and the group starts collapsed (issue
-   * #205): headings you can skim beat controls you have to scroll past, and
-   * the panel now opens as a table of contents for the element. See
+   * The heading is a disclosure button (issue #205). Shape and identity open
+   * first; secondary groups stay collapsed so controls remain easy to scan. See
    * `_openGroups` for why the open set is keyed by title.
    *
    * Collapsed means *not rendered*, not hidden — so a closed group's `ha-form`
@@ -3345,7 +3359,8 @@ export class FloorplanCardEditor extends LitElement {
   // ---- zoom ----------------------------------------------------------------
 
   private _setZoom(z: number): void {
-    this._zoom = Math.min(3, Math.max(0.5, Math.round(z * 100) / 100));
+    this._fitToViewport = false;
+    this._zoom = Math.min(3, Math.max(0.01, Math.round(z * 100) / 100));
   }
 
   /** Ctrl/Cmd + wheel zooms the canvas (also catches trackpad pinch); plain wheel scrolls. */
@@ -3355,10 +3370,17 @@ export class FloorplanCardEditor extends LitElement {
     this._setZoom(this._zoom - Math.sign(ev.deltaY) * 0.1);
   }
 
-  /** Reset to 100% (where the stage fits the wrap width) and scroll home. */
+  /** Fit both dimensions, including tall plans in a docked or fullscreen canvas. */
   private _fitView(): void {
-    this._setZoom(1);
-    this._canvasWrap?.scrollTo({ top: 0, left: 0 });
+    this._fitToViewport = true;
+    const wrap = this._canvasWrap;
+    if (!wrap?.clientWidth || !wrap.clientHeight) return;
+    // Use the full viewport width even while a vertical scrollbar is present:
+    // fitting removes it. Rounding down avoids reintroducing one at the edge.
+    const width = wrap.getBoundingClientRect().width - 2;
+    const fit = (wrap.clientHeight * this._config.width) / (width * this._config.height);
+    this._zoom = Math.max(0.01, Math.min(1, Math.floor(fit * 100) / 100));
+    wrap.scrollTo({ top: 0, left: 0 });
   }
 
   /** One-line description of the selected element for the Element header. */
@@ -3563,7 +3585,7 @@ export class FloorplanCardEditor extends LitElement {
             >`
           : html`
               <span class="ctx-count">${n} selected</span>
-              <span class="ctx-hint">Properties and actions are in the Element section below.</span>
+              <span class="ctx-hint">Edit properties in the inspector.</span>
             `;
     }
 
@@ -3716,34 +3738,36 @@ export class FloorplanCardEditor extends LitElement {
             ></div>`
           : nothing}
         <div class="toolbar">
-          <!-- Tools — modes; exactly one is active at a time -->
-          <div class="seg" role="group" aria-label="Tool">
-            ${(
-              ["select", "wall", "door", "passage", "window", "skylight", "tracker", "area"] as Tool[]
-            ).map(
-              (t) => html`
-                <button
-                  class=${this._tool === t ? "active" : ""}
-                  aria-pressed=${this._tool === t}
-                  title=${TOOL_META[t].label}
-                  @click=${() => {
-                    this._tool = t;
-                    this._draft = null;
-                    this._draftTracker = null;
-                    this._draftArea = null;
-                    this._areaHover = null;
-                    this._areaDragStart = null;
-                    this._areaDragCurrent = null;
-                    this._clearAreaDragTimer();
-                    this._areaDragMoved = false;
-                  }}
-                >
-                  <ha-icon icon=${TOOL_META[t].icon}></ha-icon>${TOOL_META[t].label}
-                </button>`
-            )}
+          <div class="editor-brand">
+            <ha-icon icon="mdi:floor-plan"></ha-icon>
+            <div><span class="editor-eyebrow">Easy Floorplan</span>
+              <strong>${c.title || "Untitled plan"}</strong></div>
+          </div>
+          <!-- History -->
+          <div class="group">
+            <button aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" ?disabled=${!this._history.length} @click=${this._undo}>
+              <ha-icon icon="mdi:undo"></ha-icon>
+            </button>
+            <button aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" ?disabled=${!this._future.length} @click=${this._redo}>
+              <ha-icon icon="mdi:redo"></ha-icon>
+            </button>
           </div>
 
-          <span class="divider"></span>
+          <!-- Insert — one popover for everything droppable on the floor -->
+          <span class="pop-wrap">
+            <button
+              aria-haspopup="true"
+              aria-expanded=${this._addMenuOpen}
+              @click=${() => {
+                this._addMenuOpen = !this._addMenuOpen;
+                this._floorMenuOpen = false;
+              }}
+            >
+              + Add
+            </button>
+            ${this._addMenuOpen ? this._renderAddMenu() : nothing}
+          </span>
+
 
           <!-- Expand: break out of HA's narrow config dialog into a full-screen
                workspace. Kept next to the tools so it's reachable even when the
@@ -3782,58 +3806,41 @@ export class FloorplanCardEditor extends LitElement {
           </button>
           ${this._applyError ? html`<span class="apply-error">${this._applyError}</span>` : nothing}
 
-          <!-- Labels: declutter a dense plan while editing (issue #52). -->
-          <button
-            class="icon-btn"
-            aria-pressed=${this._hideLabels}
-            title=${this._hideLabels
-              ? "Show element labels on the canvas"
-              : "Hide element labels — easier to aim on a dense plan"}
-            @click=${() => {
-              this._hideLabels = !this._hideLabels;
-            }}
-          >
-            <ha-icon
-              icon=${this._hideLabels ? "mdi:label-off-outline" : "mdi:label-outline"}
-            ></ha-icon>
-            Labels
-          </button>
+        </div>
 
-          <span class="divider"></span>
-
-          <!-- Insert — one popover for everything droppable on the floor -->
-          <span class="pop-wrap">
-            <button
-              aria-haspopup="true"
-              aria-expanded=${this._addMenuOpen}
-              @click=${() => {
-                this._addMenuOpen = !this._addMenuOpen;
-                this._floorMenuOpen = false;
-              }}
-            >
-              + Add
-            </button>
-            ${this._addMenuOpen ? this._renderAddMenu() : nothing}
-          </span>
-
-          <span class="spacer"></span>
-
-          <!-- History -->
-          <div class="group">
-            <button aria-label="Undo" title="Undo (Ctrl/Cmd+Z)" ?disabled=${!this._history.length} @click=${this._undo}>
-              <ha-icon icon="mdi:undo"></ha-icon>
-            </button>
-            <button aria-label="Redo" title="Redo (Ctrl/Cmd+Shift+Z)" ?disabled=${!this._future.length} @click=${this._redo}>
-              <ha-icon icon="mdi:redo"></ha-icon>
-            </button>
-          </div>
-
-          <span class="divider"></span>
-
+        <div class="workspace">
+          <!-- Tools — modes; exactly one is active at a time -->
+          <nav class="tool-rail" aria-label="Drawing tools">
+            ${(
+              ["select", "wall", "door", "passage", "window", "skylight", "tracker", "area"] as Tool[]
+            ).map(
+              (t) => html`
+                <button
+                  class=${this._tool === t ? "active" : ""}
+                  aria-pressed=${this._tool === t}
+                  title=${TOOL_META[t].label}
+                  @click=${() => {
+                    this._tool = t;
+                    this._draft = null;
+                    this._draftTracker = null;
+                    this._draftArea = null;
+                    this._areaHover = null;
+                    this._areaDragStart = null;
+                    this._areaDragCurrent = null;
+                    this._clearAreaDragTimer();
+                    this._areaDragMoved = false;
+                  }}
+                >
+                  <ha-icon icon=${TOOL_META[t].icon}></ha-icon><span>${TOOL_META[t].label}</span>
+                </button>`
+            )}
+          </nav>
+        <div class="canvas-column">
+          <div class="canvas-heading">
           <!-- Floor — switch + add inline; rename/delete behind the gear -->
           <span class="floors pop-wrap">
-            <label>floor</label>
-            <select
+            <ha-icon icon="mdi:layers-outline"></ha-icon><label for="editing-floor">Floor</label>
+            <select id="editing-floor" aria-label="Editing floor"
               @change=${(e: Event) => {
                 this._switchFloor((e.target as HTMLSelectElement).value);
                 // Hand focus back to the canvas: while the <select> keeps it,
@@ -3965,11 +3972,26 @@ export class FloorplanCardEditor extends LitElement {
                 </div>`
               : nothing}
           </span>
-        </div>
+            <span class="spacer"></span>
+          <!-- Labels: declutter a dense plan while editing (issue #52). -->
+          <button
+            class="icon-btn"
+            aria-pressed=${this._hideLabels}
+            title=${this._hideLabels
+              ? "Show element labels on the canvas"
+              : "Hide element labels — easier to aim on a dense plan"}
+            @click=${() => {
+              this._hideLabels = !this._hideLabels;
+            }}
+          >
+            <ha-icon
+              icon=${this._hideLabels ? "mdi:label-off-outline" : "mdi:label-outline"}
+            ></ha-icon>
+            Labels
+          </button>
 
-        ${this._renderContextBar()}
 
-        <div class="workspace">
+          </div>
         <div class="canvas-outer">
         <!-- The viewport keeps the canvas's aspect ratio so its height does not
              grow with the zoom level. Otherwise zooming in made this box taller,
@@ -4181,10 +4203,13 @@ export class FloorplanCardEditor extends LitElement {
         </div>
         </div>
 
-        <div class="side">
+          ${this._renderContextBar()}
+        </div>
+        <aside class="side" aria-label="Inspector">
+          <div class="inspector-heading"><span>Inspector</span><span class="inspector-count">${this._selection.length ? `${this._selection.length} selected` : "Nothing selected"}</span></div>
           ${this._renderElementEdit()}
           ${this._renderPanel()}
-        </div>
+        </aside>
         </div>
       </div>
     `;
@@ -4260,8 +4285,8 @@ export class FloorplanCardEditor extends LitElement {
       if (select.custom_value) {
         const listId = `sel-${f.name}-${options.length}`;
         return html`<div class="row wide">
-          <label>${f.label}</label>
-          <input
+          <label for=${`field-${f.name}`}>${f.label}</label>
+          <input id=${`field-${f.name}`}
             type="text"
             list=${listId}
             .value=${String(value ?? "")}
@@ -4274,8 +4299,8 @@ export class FloorplanCardEditor extends LitElement {
         </div>`;
       }
       return html`<div class="row">
-        <label>${f.label}</label>
-        <select
+        <label for=${`field-${f.name}`}>${f.label}</label>
+        <select id=${`field-${f.name}`}
           .value=${String(value ?? "")}
           @change=${(e: Event) =>
             this._applyFallback(spec, f, (e.target as HTMLSelectElement).value, false, apply)}
@@ -4288,8 +4313,8 @@ export class FloorplanCardEditor extends LitElement {
     }
     if ("boolean" in sel) {
       return html`<div class="row">
-        <label>${f.label}</label>
-        <input
+        <label for=${`field-${f.name}`}>${f.label}</label>
+        <input id=${`field-${f.name}`}
           type="checkbox"
           .checked=${!!value}
           @change=${(e: Event) =>
@@ -4301,9 +4326,9 @@ export class FloorplanCardEditor extends LitElement {
       const n = sel.number as { min?: number; max?: number; step?: number; mode?: string };
       const slider = n.mode === "slider";
       return html`<div class="row">
-        <label>${f.label}</label>
+        <label for=${`field-${f.name}`}>${f.label}</label>
         ${slider
-          ? html`<input
+          ? html`<input aria-label=${f.label}
               type="range"
               min=${n.min ?? 0}
               max=${n.max ?? 100}
@@ -4313,7 +4338,7 @@ export class FloorplanCardEditor extends LitElement {
                 this._applyFallback(spec, f, Number((e.target as HTMLInputElement).value), true, apply)}
             />`
           : nothing}
-        <input
+        <input id=${`field-${f.name}`}
           class="num"
           type="number"
           min=${n.min ?? nothing}
@@ -4342,19 +4367,20 @@ export class FloorplanCardEditor extends LitElement {
         include_entities?: string[];
       };
       return html`<div class="row wide">
-        <label>${f.label}</label>
+        <label for=${`field-${f.name}`}>${f.label}</label>
         ${this._renderEntityPicker(
           String(value ?? ""),
           (v) => this._applyFallback(spec, f, v, false, apply),
           entitySel.filter?.[0]?.domain,
-          entitySel.include_entities
+          entitySel.include_entities,
+          `field-${f.name}`
         )}
       </div>`;
     }
     if ("icon" in sel) {
       return html`<div class="row wide">
-        <label>${f.label}</label>
-        <input
+        <label for=${`field-${f.name}`}>${f.label}</label>
+        <input id=${`field-${f.name}`}
           type="text"
           placeholder=${(sel.icon as { placeholder?: string }).placeholder ?? "mdi:…"}
           .value=${String(value ?? "")}
@@ -4366,8 +4392,8 @@ export class FloorplanCardEditor extends LitElement {
     // Actions need HA's action editor — configurable via YAML outside HA.
     if ("ui_action" in sel) return html`${nothing}`;
     return html`<div class="row">
-      <label>${f.label}</label>
-      <input
+      <label for=${`field-${f.name}`}>${f.label}</label>
+      <input id=${`field-${f.name}`}
         type="text"
         .value=${String(value ?? "")}
         @input=${(e: Event) =>
@@ -4380,10 +4406,12 @@ export class FloorplanCardEditor extends LitElement {
     value: string,
     onChange: (entity: string) => void,
     includeDomains?: string[],
-    includeEntities?: string[]
+    includeEntities?: string[],
+    inputId?: string
   ): TemplateResult {
     if (customElements.get("ha-entity-picker")) {
       return html`<ha-entity-picker
+        id=${inputId ?? nothing}
         .hass=${this.hass}
         .value=${value}
         .includeDomains=${includeDomains}
@@ -4393,6 +4421,7 @@ export class FloorplanCardEditor extends LitElement {
       ></ha-entity-picker>`;
     }
     return html`<input
+      id=${inputId ?? nothing}
       type="text"
       placeholder="sensor.example"
       .value=${value}
@@ -4620,7 +4649,7 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   /**
-   * Per-element editor area, rendered BELOW the canvas with a small title.
+   * Per-element properties in the inspector beside the canvas (below on mobile).
    * Kept separate from the project panel so users can tell the two apart, and
    * separate from the context bar so the bar's height stays stable across
    * selection changes (the canvas no longer jumps when you click around).
@@ -4631,8 +4660,12 @@ export class FloorplanCardEditor extends LitElement {
     if (n === 0 || !sel) {
       return html`
         <section class="edit-area">
-          <h3 class="section-title">Element</h3>
-          <p class="hint">Select an element on the canvas to edit its properties here.</p>
+          <div class="inspector-empty">
+            <ha-icon icon="mdi:cursor-default-outline"></ha-icon>
+            <strong>Make it your own</strong>
+            <p>Select a wall, room or object to edit its properties.</p>
+            <span>Drag a box to select several.</span>
+          </div>
         </section>
       `;
     }
@@ -6623,117 +6656,6 @@ export class FloorplanCardEditor extends LitElement {
   static styles = [
     skinTokens,
     css`
-    .editor {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    /* Full-screen workspace, shown as a popover so the top layer lifts it clear
-       of HA's edit dialog (whose surface is transformed — see updated()). The
-       resets undo the UA popover defaults: fit-content size, auto margins, a
-       solid border and padding. The fixed position only matters to the
-       non-popover fallback, where the transformed dialog surface is the
-       containing block — there "fullscreen" fills the dialog, not the page. */
-    .editor.fullscreen {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      width: auto;
-      height: auto;
-      max-width: none;
-      max-height: none;
-      margin: 0;
-      border: none;
-      padding: 12px;
-      box-sizing: border-box;
-      color: inherit;
-      background: var(--card-background-color, #fff);
-      overflow: hidden;
-    }
-    /* Toolbar-icon buttons (Expand/Exit, Apply) — match the gear button's
-       icon+label alignment so they read as part of the toolbar. */
-    .expand-toggle,
-    .apply-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-    }
-    /* Apply writes to the dashboard, unlike everything else in the toolbar —
-       accented so it reads as the one committing action. */
-    .apply-btn {
-      color: var(--primary-color, #03a9f4);
-      border-color: var(--primary-color, #03a9f4);
-    }
-    /* Why the last Apply didn't go through; sits in the toolbar so it is
-       visible in the fullscreen workspace too, where nothing else is. */
-    .apply-error {
-      font-size: 12px;
-      color: var(--error-color, #c62828);
-    }
-    /* Below the two toolbars: the canvas and the element/project sections.
-       Stacked at dialog width; split into canvas + docked side panel when
-       expanded so the extra width isn't wasted. */
-    .workspace {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-    }
-    .side {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-    }
-    .editor.fullscreen .workspace {
-      flex-direction: row;
-      align-items: stretch;
-      flex: 1 1 auto;
-      min-height: 0;
-    }
-    .editor.fullscreen .canvas-outer {
-      flex: 1 1 auto;
-      min-width: 0;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-    }
-    .editor.fullscreen .canvas-wrap {
-      flex: 1 1 auto;
-      min-height: 0;
-      height: auto;
-      resize: none;
-    }
-    /* Docked inspector — fixed, scrollable column beside the canvas. */
-    .editor.fullscreen .side {
-      flex: 0 0 340px;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding-right: 2px;
-    }
-    /* At real dialog width the side panel can drop below instead of squeezing
-       the canvas to nothing. */
-    @media (max-width: 900px) {
-      .editor.fullscreen .workspace {
-        flex-direction: column;
-        /* Stacked panels can exceed a short viewport (phone landscape) — the
-           root clips, so the workspace itself must scroll. */
-        overflow-y: auto;
-      }
-      .editor.fullscreen .side {
-        flex: 0 0 auto;
-        max-height: 40vh;
-      }
-    }
-    .toolbar {
-      display: flex;
-      gap: 4px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .toolbar .spacer {
-      flex: 1;
-    }
     /* generic inline cluster of related controls */
     .group {
       display: inline-flex;
@@ -8392,6 +8314,7 @@ export class FloorplanCardEditor extends LitElement {
       opacity: 1;
     }
   `,
+    editorWorkspaceStyles,
   ];
 }
 
