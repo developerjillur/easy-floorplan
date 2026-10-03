@@ -550,6 +550,10 @@ to give viewers these controls directly on the card:
 - **Rotate left / right** moves through the four viewing directions in 90° steps.
 - **Reset view** returns to the saved view, appearance and rotation and zooms out.
 
+![Live line art with view controls and simulated devices](img/line-art-live-desktop.png)
+
+The same controls [wrap on a narrow screen](img/line-art-live-mobile.png).
+
 The controls are enabled for new plans; existing plans can opt in without changing
 their saved layout. Choose the initial appearance and view in the editor:
 

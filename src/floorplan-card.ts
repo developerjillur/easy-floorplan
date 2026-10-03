@@ -172,7 +172,7 @@ import {
 } from "./projection";
 import { openingSolids } from "./projection-openings";
 import { downloadLineArtSvg } from "./line-art-export";
-import { LINE_INK, lineArtStyles, normalizeAppearance, solidEdges, type PlanAppearance } from "./line-art";
+import { LINE_INK, lineArtStyles, normalizeAppearance, solidEdgeRenderer, type PlanAppearance } from "./line-art";
 import { renderViewControls, viewControlStyles } from "./view-controls";
 import { AmountTween, OPENING_TWEEN_MS, rafTweenFrames } from "./opening-tween";
 import { focusOrder, normalizeRoomFocus, stepFocus } from "./room-focus";
@@ -869,8 +869,9 @@ export class FloorplanCard extends LitElement {
       );
     }
     const byId = new Map(active.openings.map((o) => [o.id, o]));
+    const solidEdges = c.appearance === "line-art" ? solidEdgeRenderer(solids, LINE_INK) : undefined;
     return renderIsoSolids(solids, (solid, drawing) => {
-      if (c.appearance === "line-art") drawing = svg`${drawing}${solidEdges(solid, LINE_INK)}`;
+      if (solidEdges) drawing = svg`${drawing}${solidEdges(solid)}`;
       if (solid.kind !== "panel" && solid.kind !== "opening-hit") return drawing;
       const o = byId.get(solid.id!);
       if (!o || !openingIsPressable(o, this._featuresOf)) return drawing;

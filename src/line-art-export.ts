@@ -13,7 +13,7 @@ import {
   projectedCanvasSize, renderIsoSolids, wallSolids, type DisplayFrame, type IsoSolid,
 } from "./projection";
 import { openingSolids } from "./projection-openings";
-import { solidEdges } from "./line-art";
+import { solidEdgeRenderer } from "./line-art";
 import { symbolCatalog } from "./symbols";
 import { DEFAULT_HEIGHT, DEFAULT_WIDTH, type Floor, type FloorplanCardConfig, type Opening } from "./types";
 
@@ -61,6 +61,7 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
     for (const f of floor.furniture) solids.push(furnitureSolid(f, map, h, PAPER,
       svg`<g transform=${rotate || nothing}><g transform="translate(${lift.x} ${lift.y})">${drawFurniture(f)}</g></g>`));
   }
+  const solidEdges = solidEdgeRenderer(solids, INK);
   const view = frame.projection === "iso" ? "3d" : "2d";
   const title = `${c.title ? `${c.title} — ` : ""}${floor.name} (${view.toUpperCase()})`;
   const margin = 20;

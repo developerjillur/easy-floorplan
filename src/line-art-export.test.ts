@@ -48,6 +48,33 @@ describe("standalone line art", () => {
     expect(paths.some((d) => (d.match(/M/g) ?? []).length === 3)).toBe(true);
   });
 
+  it("keeps visible wall corners after joined-wall rendering without adding seams to straight joins", () => {
+    const { config, floor } = fixture();
+    floor.openings = [];
+    floor.furniture = [];
+    floor.areas = [];
+    config.wallHeight = 60;
+    const wall = (x1: number, y1: number, x2: number, y2: number) =>
+      ({ id: `${x1},${y1}`, x1, y1, x2, y2, thickness: 8 });
+    const uprights = () => {
+      const doc = parse(createLineArtSvg(config, floor, 0).svg);
+      const points = [...doc.querySelectorAll(".solid-edges")].flatMap(e =>
+        [...e.getAttribute("d")!.matchAll(/M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/g)]
+          .map(m => m.slice(1).map(Number))
+          .filter(([x, y, tx, ty]) => Math.abs(x - tx - 60) < .001 && Math.abs(y - ty - 60) < .001)
+          .map(([x, y]) => `${x},${y}`));
+      return [...new Set(points)].sort();
+    };
+    floor.walls = [wall(0, 0, 100, 0), wall(100, 0, 100, 100), wall(100, 100, 0, 100), wall(0, 100, 0, 0)];
+    // Facing boundary corners only. The painter covers the two inner side
+    // corners with nearer wall faces; no chunk or miter seam is outlined.
+    expect(uprights()).toEqual(["-4,104", "104,-4", "104,104", "4,4", "4,96", "96,4"].sort());
+    floor.walls = [wall(0, 0, 100, 0), wall(100, 0, 200, 0)];
+    expect(uprights()).toEqual(["-4,4", "204,-4", "204,4"].sort());
+    floor.walls = [wall(0, 0, 200, 0), wall(100, 0, 100, 100)];
+    expect(uprights()).toEqual(["-4,4", "204,-4", "204,4", "96,4", "104,4", "96,104", "104,104"].sort());
+  });
+
   it.each(["2d", "3d"] as const)("rotates %s geometry and keeps room names upright", (view) => {
     const { config, floor } = fixture();
     config.view = view;
