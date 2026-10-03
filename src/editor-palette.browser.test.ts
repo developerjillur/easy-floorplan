@@ -54,7 +54,7 @@ async function mountEditor() {
 /**
  * The palette lives in the Project tab, inside the Named colors group.
  */
-async function openGroup(ed: FloorplanCardEditor, title: string): Promise<void> {
+async function openColors(ed: FloorplanCardEditor): Promise<void> {
   const root = () => ed.shadowRoot!;
   const project = root().querySelector<HTMLButtonElement>("#project-tab");
   if (!project) throw new Error("Project tab not found — did the panel change?");
@@ -62,13 +62,10 @@ async function openGroup(ed: FloorplanCardEditor, title: string): Promise<void> 
     project.click();
     await ed.updateComplete;
   }
-  const group = [...root().querySelectorAll<HTMLButtonElement>("button.cfg-group-title")]
-    .find((b) => b.textContent?.trim().startsWith(title));
-  if (!group) throw new Error(`'${title}' group not found — did the Project panel change?`);
-  if (group.getAttribute("aria-expanded") !== "true") {
-    group.click();
-    await ed.updateComplete;
-  }
+  const category = root().querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
+  category.value = "colors";
+  category.dispatchEvent(new Event("change", { bubbles: true }));
+  await ed.updateComplete;
 }
 
 async function openNamedColors(ed: FloorplanCardEditor): Promise<void> {
@@ -82,10 +79,9 @@ async function openNamedColors(ed: FloorplanCardEditor): Promise<void> {
     await ed.updateComplete;
   }
 
-  const group = [...root().querySelectorAll<HTMLButtonElement>("button.cfg-group-title")]
-    .find((b) => b.textContent?.trim().startsWith("Named colors"));
-  if (!group) throw new Error("'Named colors' group not found — did the Project panel change?");
-  group.click();
+  const category = root().querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
+  category.value = "colors";
+  category.dispatchEvent(new Event("change", { bubbles: true }));
   await ed.updateComplete;
 }
 
@@ -156,7 +152,7 @@ describe("renaming a named colour", () => {
 describe("the palette picker on a colour field", () => {
   /** Background, in Project → Appearance, carries a picker like every colour field. */
   async function picker(ed: FloorplanCardEditor): Promise<HTMLSelectElement> {
-    await openGroup(ed, "Appearance");
+    await openColors(ed);
     const found = ed.shadowRoot?.querySelector<HTMLSelectElement>("select.palette-pick");
     if (!found) throw new Error("palette picker not found — did the Appearance group change?");
     return found;

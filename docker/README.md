@@ -8,14 +8,20 @@ workspace with a sample two-floor home. Select and drag objects, edit their
 properties, use undo, switch floors, and expand the workspace. The theme button
 exercises the same Home Assistant CSS variables the editor uses in a dashboard.
 The Selection and Project tabs separate object properties from plan settings.
-Selecting an object shows its essential fields directly; More settings opens the
-advanced controls, with a direct route back. Stair navigation is available beside
-its dimensions and color. Undo keeps an existing object selected.
+Selecting an object shows its main properties directly. The category picker opens
+sensor bindings, appearance, actions or visibility in one step, with no nested
+accordions or repeated basic fields. It stays visible while its page scrolls.
+Stair navigation sits beside its dimensions and color. Undo keeps an existing
+object selected. Project settings use six destinations: Plan & floors, Colors &
+style, View & scale, Lighting, Device behavior and Symbol library.
 
-On phones, Edit properties replaces the drawing with the inspector in the same
-workspace. Back to plan preserves the selection and manual zoom. A compact
+On phones, Edit properties opens a panel below a live view of the plan. The
+preview follows the selected object without replacing manual zoom; its zoom
+controls have their own space. Done returns to the full drawing area. A compact
 Drawing tool picker offers all eight modes; Project settings, undo/redo and Apply
-remain accessible. Wider layouts show the plan and inspector together.
+remain accessible. At tablet widths the inspector docks beside the plan and the
+tool picker shares the top toolbar. Large screens use a vertical tool rail.
+Short landscape screens keep the drawing and open properties side by side.
 
 This renders the actual editor with its standalone input fallbacks. Changes
 stay in the page; Apply requires a Home Assistant dashboard. Native HA entity
@@ -31,11 +37,12 @@ capture of `main` at `5641e51`; its properties sit below the large canvas.
 The [desktop workspace](../docs/img/editor-workspace-preview.jpg) keeps the
 tools, fitted plan and inspector together within a 1280×720 viewport.
 On mobile, the [drawing workspace](../docs/img/editor-workspace-mobile.jpg)
-switches to the [property workspace](../docs/img/editor-workspace-mobile-inspector.jpg)
-without scrolling below the plan; both captures are 375×812.
-The [tablet layout](../docs/img/editor-workspace-tablet.jpg) keeps the inspector
-beside the plan with tools above both. The [landscape menu](../docs/img/editor-workspace-landscape.jpg)
-shows the furniture picker staying within a short fullscreen viewport.
+opens [properties beneath a live preview](../docs/img/editor-workspace-mobile-inspector.jpg);
+both captures are 375×812. The [tablet layout](../docs/img/editor-workspace-tablet.jpg)
+keeps the inspector beside the plan with a compact toolbar at 960×780.
+The [landscape properties](../docs/img/editor-workspace-landscape.jpg) show both
+panes within a 740×360 fullscreen viewport. The [project settings](../docs/img/editor-workspace-project.jpg)
+show a direct category with flat field headings.
 These demonstrate the standalone preview, not native Home Assistant forms.
 
 ## Home Assistant integration

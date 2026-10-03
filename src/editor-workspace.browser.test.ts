@@ -41,7 +41,7 @@ describe("responsive editor workspace", () => {
     expect(t.rect(".stage").width).toBeLessThanOrEqual(t.el(".canvas-wrap").clientWidth + 1);
   });
 
-  it.each([320, 360, 560, 800])("keeps controls and selected properties inside a %ipx editor", async (width) => {
+  it.each([320, 360, 560, 740])("keeps controls and selected properties inside a %ipx editor", async (width) => {
     const t = await mount(width);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
@@ -55,7 +55,7 @@ describe("responsive editor workspace", () => {
     }
     t.el(".inspector-jump").click();
     await settle(t.editor);
-    expect(t.el(".canvas-column").checkVisibility()).toBe(false);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(true);
     expect(t.el(".side").checkVisibility()).toBe(true);
     expect(t.rect(".side").width).toBeLessThanOrEqual(width);
     for (const input of t.root.querySelectorAll<HTMLElement>(".side input, .side select")) {
@@ -66,11 +66,13 @@ describe("responsive editor workspace", () => {
     }
   });
 
-  it.each([842, 900, 999])("keeps plan and properties together at the %ipx tablet width", async (width) => {
+  it.each([780, 842, 900, 999])("keeps plan and properties together at the %ipx tablet width", async (width) => {
     const t = await mount(width);
-    expect(t.rect(".tool-rail").bottom).toBeLessThanOrEqual(t.rect(".canvas-column").top + 1);
+    expect(t.el(".tool-rail").checkVisibility()).toBe(false);
+    expect(t.el(".tool-compact").checkVisibility()).toBe(true);
+    expect(t.rect(".toolbar").height).toBeLessThan(70);
     expect(t.rect(".canvas-column").right).toBeLessThanOrEqual(t.rect(".side").left + 1);
-    expect(t.rect(".canvas-wrap").width).toBeGreaterThan(490);
+    expect(t.rect(".canvas-wrap").width).toBeGreaterThan(450);
     expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
     expect(t.rect(".stage").width).toBeLessThanOrEqual(t.el(".canvas-wrap").clientWidth + 1);
   });
@@ -106,7 +108,7 @@ describe("responsive editor workspace", () => {
     expect(t.root.querySelector("#field-w")).not.toBeNull();
   });
 
-  it("provides direct mobile jumps between the selection and plan", async () => {
+  it("opens and closes mobile properties while preserving manual zoom", async () => {
     const t = await mount(360);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
@@ -116,7 +118,7 @@ describe("responsive editor workspace", () => {
     t.el(".inspector-jump").click();
     await settle(t.editor);
     expect(t.root.activeElement).toBe(t.el("#selection-tab"));
-    expect(t.el(".canvas-column").checkVisibility()).toBe(false);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(true);
     expect(t.el(".side").checkVisibility()).toBe(true);
     t.el(".canvas-jump").click();
     await settle(t.editor);
@@ -137,6 +139,35 @@ describe("responsive editor workspace", () => {
     await settle(t.editor);
     expect(t.el(".editor").scrollWidth).toBeLessThanOrEqual(t.el(".editor").clientWidth);
     expect(t.rect(".apply-btn").right).toBeLessThanOrEqual(t.rect(".editor").right);
+  });
+
+  it("keeps the edited object visible in the phone preview while properties scroll", async () => {
+    const t = await mount(360);
+    const c = config();
+    c.floors![0].furniture[0].y = 1000;
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el('[title="Reset zoom to 100%"]').click();
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    const preview = t.rect(".canvas-wrap");
+    const selected = t.rect(".stage .selected");
+    expect(selected.top).toBeGreaterThanOrEqual(preview.top);
+    expect(selected.bottom).toBeLessThanOrEqual(preview.bottom);
+    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100%");
+    // Zoom controls have their own space, so they cannot cover the edited object.
+    expect(t.rect(".zoom-overlay").top).toBeGreaterThanOrEqual(preview.bottom);
+    const width = t.el("#field-w") as HTMLInputElement;
+    width.value = "240";
+    width.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(t.editor);
+    expect(t.rect(".stage .selected").width).toBeGreaterThan(selected.width);
+    t.el(".side").scrollTop = t.el(".side").scrollHeight;
+    await settle(t.editor);
+    expect(t.rect(".canvas-wrap").top).toBe(preview.top);
+    expect(t.rect(".canvas-wrap").height).toBe(preview.height);
   });
 
   it.each([286, 320, 560])("fits a landscape plan in a %ipx editor without page overflow", async (width) => {
@@ -221,22 +252,24 @@ describe("responsive editor workspace", () => {
     await settle(t.editor);
     expect(t.root.querySelector<HTMLInputElement>("#field-w")?.value).toBe("240");
   });
-  it("keeps essentials flat and preserves all advanced furniture fields", async () => {
+  it("opens each furniture category directly without repeating its properties", async () => {
     const t = await mount(1300);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
-    expect(t.root.querySelectorAll(".cfg-group")).toHaveLength(0);
-    expect(t.root.querySelector("#field-w")).not.toBeNull();
-    expect(t.root.querySelector("#field-type")).toBeNull();
-    t.el(".more-settings").click();
-    await settle(t.editor);
+    const picker = t.el('[aria-label="Object settings category"]') as HTMLSelectElement;
     expect(t.root.querySelector("#field-type")).not.toBeNull();
-    expect(t.root.querySelectorAll("#field-w")).toHaveLength(1);
-    expect(t.root.activeElement).toBe(t.el(".back-to-essentials"));
-    t.el(".back-to-essentials").click();
-    await settle(t.editor);
-    expect(t.root.querySelectorAll(".cfg-group")).toHaveLength(0);
-    expect(t.root.activeElement).toBe(t.el(".more-settings"));
+    const seen = new Set<string>();
+    for (const option of picker.options) {
+      picker.value = option.value;
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle(t.editor);
+      expect(t.root.querySelector("button.cfg-group-title")).toBeNull();
+      for (const field of t.root.querySelectorAll<HTMLInputElement>('[id^="field-"]')) {
+        expect(seen.has(field.id)).toBe(false);
+        seen.add(field.id);
+      }
+    }
+    expect(seen).toEqual(new Set(["field-type", "field-w", "field-h", "field-angle", "field-entity", "field-goToFloor"]));
   });
 
   it("makes project settings reachable from the mobile plan", async () => {
@@ -246,6 +279,7 @@ describe("responsive editor workspace", () => {
     expect(t.el(".side").checkVisibility()).toBe(true);
     expect(t.el("#project-panel").hidden).toBe(false);
     expect(t.root.querySelector("#field-title")).not.toBeNull();
+    expect(t.rect(".row.col > label").height).toBeLessThan(30);
     t.el(".canvas-jump").click();
     await settle(t.editor);
     expect(t.el(".canvas-column").checkVisibility()).toBe(true);
@@ -261,6 +295,26 @@ describe("responsive editor workspace", () => {
       expect(t.root.querySelector(".tool-rail button.active")?.textContent?.trim()).toBe(option.textContent);
       expect(t.el(".canvas-column").checkVisibility()).toBe(true);
     }
+  });
+
+  it("keeps category navigation visible while scrolling a long settings page", async () => {
+    const t = await mount(360);
+    t.el(".project-settings").click();
+    await settle(t.editor);
+    const picker = t.el('[aria-label="Project settings category"]') as HTMLSelectElement;
+    picker.value = "view";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(t.editor);
+    t.el(".side").scrollTop = t.el(".side").scrollHeight;
+    await settle(t.editor);
+    const category = picker.getBoundingClientRect();
+    expect(category.top).toBeGreaterThanOrEqual(t.rect(".inspector-heading").bottom);
+    expect(category.bottom).toBeLessThan(t.rect(".side").bottom);
+    picker.value = "plan";
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(t.editor);
+    expect(t.el(".side").scrollTop).toBe(0);
+    expect(t.el("#field-title").checkVisibility()).toBe(true);
   });
 
   it("shows staircase navigation without expanding Actions", async () => {
@@ -304,6 +358,12 @@ describe("responsive editor workspace", () => {
     await settle(t.editor);
     const emitted: FloorplanCardConfig[] = [];
     t.editor.addEventListener("config-changed", (event) => emitted.push((event as CustomEvent).detail.config));
+    if (test.kind === "opening") {
+      const picker = t.el('[aria-label="Object settings category"]') as HTMLSelectElement;
+      picker.value = "sensors";
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle(t.editor);
+    }
     const field = t.el(`#field-${test.field}`) as HTMLInputElement;
     expect(field.checkVisibility()).toBe(true);
     if (test.kind === "item") expect(t.el("#field-size").checkVisibility()).toBe(true);
@@ -315,13 +375,16 @@ describe("responsive editor workspace", () => {
     if (test.kind === "item") expect(element.kind).toBe("light");
     if (test.kind === "opening") expect(element.type).toBe("window");
     if (test.kind === "text") expect(element.attribute).toBeUndefined();
-    // Moving to another object always starts at essentials, even from advanced settings.
-    if (t.root.querySelector(".more-settings")) {
-      t.el(".more-settings").click();
+    // Changing objects returns to its primary properties without carrying the old category.
+    const picker = t.root.querySelector<HTMLSelectElement>('[aria-label="Object settings category"]');
+    if (picker) {
+      picker.value = picker.options[picker.options.length - 1].value;
+      picker.dispatchEvent(new Event("change", { bubbles: true }));
       await settle(t.editor);
       (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
       await settle(t.editor);
-      expect(t.root.querySelectorAll(".cfg-group")).toHaveLength(0);
+      expect((t.el('[aria-label="Object settings category"]') as HTMLSelectElement).value).toBe("properties");
+      expect(t.root.querySelector("#field-w")).not.toBeNull();
     }
   });
 

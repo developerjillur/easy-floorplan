@@ -352,12 +352,11 @@ async function openSwitcherPanel(ed: FloorplanCardEditor): Promise<HTMLInputElem
   const root = ed.shadowRoot!;
   root.querySelector<HTMLButtonElement>("#project-tab")?.click();
   await ed.updateComplete;
-  [...root.querySelectorAll<HTMLButtonElement>(".cfg-group-title")]
-    .find((b) => b.textContent?.includes("Floor switcher"))
-    ?.click();
+  const category = root.querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
+  category.value = "plan";
+  category.dispatchEvent(new Event("change", { bubbles: true }));
   await ed.updateComplete;
-  const group = [...root.querySelectorAll<HTMLElement>(".cfg-group")]
-    .find((el) => el.querySelector(".cfg-group-title")?.textContent?.includes("Floor switcher"))!;
+  const group = root.querySelector<HTMLElement>('[data-group="Floor switcher"]')!;
   return [...group.querySelectorAll<HTMLInputElement>("input[type=number]")];
 }
 
@@ -842,12 +841,7 @@ describe("the editor lets you drag the switcher anywhere on the canvas", () => {
     // and a partial position was committed on release.
     const t = await mountEditor();
     const root = t.ed.shadowRoot!;
-    root.querySelector<HTMLButtonElement>("#project-tab")?.click();
-    await t.ed.updateComplete;
-    [...root.querySelectorAll<HTMLButtonElement>(".cfg-group-title")]
-      .find((b) => b.textContent?.includes("Floor switcher"))
-      ?.click();
-    await t.ed.updateComplete;
+    await openSwitcherPanel(t.ed);
     const field = root.querySelector('input[aria-label="Floor switcher X, in canvas units"]') as HTMLInputElement | null;
     expect(field, "a coordinate field to focus").toBeTruthy();
     field!.focus();
@@ -878,12 +872,7 @@ describe("the editor lets you drag the switcher anywhere on the canvas", () => {
     const t = await mountEditor({ floorSwitcher: { x: 60, y: 100 } });
     // The fields live in the Project tab and Floor switcher group.
     const root = t.ed.shadowRoot!;
-    root.querySelector<HTMLButtonElement>("#project-tab")?.click();
-    await t.ed.updateComplete;
-    [...root.querySelectorAll<HTMLButtonElement>(".cfg-group-title")]
-      .find((b) => b.textContent?.includes("Floor switcher"))
-      ?.click();
-    await t.ed.updateComplete;
+    await openSwitcherPanel(t.ed);
 
     const names = [...root.querySelectorAll("input[type=number]")]
       .map((i) => i.getAttribute("aria-label"))

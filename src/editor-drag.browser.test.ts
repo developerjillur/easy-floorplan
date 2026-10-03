@@ -138,7 +138,7 @@ describe("editor drag", () => {
     const t = await mountEditor();
     // Zoom until the stage overflows the wrap, so the wrap can scroll. The
     // scroll amount below is the one from #232's review: 150px mid-drag.
-    await t.zoomIn(3);
+    await t.zoomIn(4);
     const scrollable = t.wrap.scrollHeight - t.wrap.clientHeight;
     // If this fails the harness is wrong, not the editor — a canvas that
     // cannot scroll cannot reproduce the bug, and the test would pass vacuously.
