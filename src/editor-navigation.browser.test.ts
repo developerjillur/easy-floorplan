@@ -31,19 +31,18 @@ async function mount(c: FloorplanCardConfig, kind?: SelKind) {
 /** Compare the rendered destinations with the existing schemas, including conditional fields. */
 async function expectEveryFieldOnce(editor: FloorplanCardEditor, specs: (FormSpec | undefined)[], project = false) {
   const root = editor.shadowRoot!;
-  const picker = root.querySelector<HTMLSelectElement>(`[aria-label="${project ? "Project" : "Object"} settings category"]`)!;
+  const picker = root.querySelector<HTMLElement>(`[role="tablist"][aria-label="${project ? "Project" : "Object"} settings"]`)!;
   expect(picker).not.toBeNull();
   const found = new Set<string>();
-  for (const option of picker.options) {
-    picker.value = option.value;
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  for (const option of picker.querySelectorAll<HTMLButtonElement>("button")) {
+    option.click();
     await editor.updateComplete;
     expect(root.querySelector("button.cfg-group-title")).toBeNull();
     for (const field of root.querySelectorAll<HTMLElement>('[id^="field-"]')) {
       expect(found.has(field.id), `${field.id} repeated in ${option.textContent}`).toBe(false);
       found.add(field.id);
     }
-    if (option.value === "actions") {
+    if (option.dataset.page === "actions") {
       const hasActions = specs.some((spec) => spec?.fields.some((field) => "ui_action" in field.selector));
       expect(root.querySelectorAll(hasActions ? ".action-editor-note" : ".unbound-actions")).toHaveLength(1);
     }

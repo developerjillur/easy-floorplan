@@ -483,6 +483,8 @@ export class FloorplanCardEditor extends LitElement {
   @state() private _selectionPage = "properties";
   @state() private _projectPage = "plan";
   @state() private _mobileInspector = false;
+  @state() private _previewCollapsed = false;
+  @state() private _keyboardOpen = false;
   /**
    * Expanded (fullscreen) editing. HA renders the card config editor in a
    * narrow dialog (~480–560px), which is cramped for a visual canvas editor.
@@ -505,6 +507,7 @@ export class FloorplanCardEditor extends LitElement {
   @query(".canvas-wrap") private _canvasWrap?: HTMLElement;
   private _canvasResize?: ResizeObserver;
   private _fitToViewport = true;
+  private _numberDraft?: { form: HTMLElement; name: string; value: unknown };
 
   private _drag: Drag | null = null;
   /**
@@ -576,6 +579,24 @@ export class FloorplanCardEditor extends LitElement {
     // editor (Tab past the last control, a dialog opening above) lands on UI
     // hidden behind the top layer. Collapse instead of leaving the user blind.
     if (this._fullscreen && !ev.composedPath().includes(this)) this._fullscreen = false;
+    this._syncVisualViewport();
+  };
+
+  /** Keep the expanded editor above a phone keyboard, including HA's shadow inputs. */
+  private _syncVisualViewport = (): void => {
+    const viewport = window.visualViewport;
+    // Page zoom must retain its normal panning behavior.
+    const height = viewport?.scale === 1 ? viewport.height : window.innerHeight;
+    const top = viewport?.scale === 1 ? viewport.offsetTop : 0;
+    this.style.setProperty("--editor-viewport-height", `${height}px`);
+    this.style.setProperty("--editor-viewport-top", `${top}px`);
+    let active = this.shadowRoot?.activeElement ?? null;
+    const path: EventTarget[] = [];
+    while (active) {
+      path.push(active);
+      active = active.shadowRoot?.activeElement ?? null;
+    }
+    this._keyboardOpen = window.innerHeight - height > 120 && isTypingPath(path);
   };
 
   public connectedCallback(): void {
@@ -587,6 +608,10 @@ export class FloorplanCardEditor extends LitElement {
     // overlays had their chance to absorb the key (see _onHostKeyDown).
     this.addEventListener("keydown", this._onHostKeyDown);
     window.addEventListener("focusin", this._onFocusIn);
+    window.visualViewport?.addEventListener("resize", this._syncVisualViewport);
+    window.visualViewport?.addEventListener("scroll", this._syncVisualViewport);
+    window.addEventListener("resize", this._syncVisualViewport);
+    this._syncVisualViewport();
     // The floor-switcher drag owns its pointer here rather than on the handle
     // (issue #281). Capture is best-effort — `_capturePointer` swallows the
     // failure — and without it every event lands on whatever the cursor is
@@ -603,10 +628,14 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   public disconnectedCallback(): void {
+    this._numberDraft = undefined;
     this._canvasResize?.disconnect();
     window.removeEventListener("keydown", this._onKeyDown, true);
     this.removeEventListener("keydown", this._onHostKeyDown);
     window.removeEventListener("focusin", this._onFocusIn);
+    window.visualViewport?.removeEventListener("resize", this._syncVisualViewport);
+    window.visualViewport?.removeEventListener("scroll", this._syncVisualViewport);
+    window.removeEventListener("resize", this._syncVisualViewport);
     const root = this.renderRoot as EventTarget;
     root.removeEventListener("pointermove", this._onSwitcherMove as EventListener, true);
     root.removeEventListener("pointerup", this._onSwitcherUp as EventListener, true);
@@ -763,7 +792,13 @@ export class FloorplanCardEditor extends LitElement {
     void this._ensureHaComponents();
     if (this._canvasWrap && typeof ResizeObserver !== "undefined") {
       this._canvasResize = new ResizeObserver(() => {
-        if (this._fitToViewport && this._gesturePointer === null) this._fitView();
+        // The phone inspector is a close-up of the object being edited.
+        // Preserve its drawing scale and pan to it; fitting the whole floor
+        // into this shallow preview makes the edited object a tiny thumbnail.
+        const side = this.renderRoot.querySelector<HTMLElement>(".side");
+        const selectionPreview = this._mobileInspector && !this._projectOpen && this._primary()
+          && side && this._canvasWrap && side.getBoundingClientRect().top >= this._canvasWrap.getBoundingClientRect().bottom;
+        if (this._fitToViewport && this._gesturePointer === null && !selectionPreview) this._fitView();
         void this.updateComplete.then(() => this._keepSelectionInPreview());
       });
       this._canvasResize.observe(this._canvasWrap);
@@ -870,6 +905,7 @@ export class FloorplanCardEditor extends LitElement {
       const previous = (changed.get("_selection") as Sel[] | undefined) ?? [];
       const identity = (selection: Sel[]) => selection.map((s) => `${s.kind}:${s.id}`).join(",");
       if (identity(previous) !== identity(this._selection)) {
+        this._numberDraft = undefined;
         this._selectionPage = "properties";
         if (this._selection.length) this._projectOpen = false;
         else if (previous.length && !this._projectOpen) this._mobileInspector = false;
@@ -2882,19 +2918,32 @@ export class FloorplanCardEditor extends LitElement {
 
   private _renderPagePicker(pages: readonly InspectorPage[], project: boolean): TemplateResult | typeof nothing {
     if (pages.length < 2) return nothing;
-    return html`<label class="settings-category">
-      <span>${project ? "Project settings" : "Edit"}</span>
-      <select aria-label=${project ? "Project settings category" : "Object settings category"}
-        .value=${project ? this._projectPage : this._selectionPage}
-        @change=${(event: Event) => {
-          const page = (event.target as HTMLSelectElement).value;
-          if (project) this._projectPage = page;
-          else this._selectionPage = page;
-          this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
-        }}>
-        ${pages.map((page) => html`<option value=${page.id}>${page.label}</option>`)}
-      </select>
-    </label>`;
+    const active = project ? this._projectPage : this._selectionPage;
+    const prefix = project ? "project" : "object";
+    const choose = (id: string) => {
+      this._numberDraft = undefined;
+      if (project) this._projectPage = id;
+      else this._selectionPage = id;
+      this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
+    };
+    return html`<div class="settings-category ${pages.length === 4 ? "two-columns" : ""}"
+      role="tablist" aria-label=${project ? "Project settings" : "Object settings"}
+      @keydown=${async (event: KeyboardEvent) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const index = pages.findIndex((page) => page.id === active);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? pages.length - 1
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + pages.length) % pages.length;
+        choose(pages[next].id);
+        await this.updateComplete;
+        this.renderRoot.querySelector<HTMLElement>(`#${prefix}-category-${pages[next].id}`)?.focus({ preventScroll: true });
+      }}>
+      ${pages.map((page) => html`<button role="tab" id=${`${prefix}-category-${page.id}`}
+        data-page=${page.id} aria-selected=${active === page.id} tabindex=${active === page.id ? 0 : -1}
+        aria-controls=${`${prefix}-settings-page`} title=${page.hint ?? page.label}
+        @click=${() => choose(page.id)}>${page.label}</button>`)}
+    </div>`;
   }
 
   /**
@@ -3401,7 +3450,7 @@ export class FloorplanCardEditor extends LitElement {
       }
       case "item": {
         const it = f.items.find((x) => x.id === sel.id);
-        return it?.entity ? `Device · ${it.entity}` : "Device";
+        return it?.entity ? String(it.name || this.hass?.states[it.entity]?.attributes.friendly_name || it.entity) : "Device";
       }
       case "text": {
         const t = f.texts.find((x) => x.id === sel.id);
@@ -3697,7 +3746,7 @@ export class FloorplanCardEditor extends LitElement {
       !(floor.areas ?? []).length;
     return html`
       <div
-        class="editor ${this._fullscreen ? "fullscreen" : ""} ${this._mobileInspector ? "show-inspector" : ""}"
+        class="editor ${this._fullscreen ? "fullscreen" : ""} ${this._mobileInspector ? "show-inspector" : ""} ${this._previewCollapsed ? "preview-collapsed" : ""} ${this._keyboardOpen ? "keyboard-open" : ""}"
         popover=${this._fullscreen ? "manual" : nothing}
         @pointerdown=${this._onEditorPointerDown}
       >
@@ -4190,6 +4239,9 @@ export class FloorplanCardEditor extends LitElement {
                 aria-controls="project-panel" tabindex=${this._projectOpen ? 0 : -1}
                 @click=${() => this._setInspector(true)}>Project</button>
             </div>
+            <button class="preview-toggle" aria-expanded=${!this._previewCollapsed}
+              @click=${() => { this._previewCollapsed = !this._previewCollapsed; }}>
+              ${this._previewCollapsed ? "Show plan" : "Hide plan"}</button>
             <button class="canvas-jump" @click=${() => this._jumpToCanvas()}>Done</button>
           </div>
           <div id="selection-panel" role="tabpanel" aria-labelledby="selection-tab" ?hidden=${this._projectOpen}>
@@ -4220,17 +4272,37 @@ export class FloorplanCardEditor extends LitElement {
     apply: (patch: Record<string, unknown>, live: boolean) => void
   ): TemplateResult {
     if (customElements.get("ha-form")) {
+      const draft = this._numberDraft;
+      const data = draft?.form.isConnected && spec.fields.some((field) => field.name === draft.name)
+        ? { ...spec.data, [draft.name]: draft.value } : spec.data;
       return html`<ha-form
         .hass=${this.hass}
-        .data=${spec.data}
+        .data=${data}
         .schema=${spec.fields}
         .computeLabel=${formLabel}
         .computeHelper=${formHelper}
+        @focusout=${(ev: FocusEvent) => {
+          if (this._numberDraft?.form === ev.currentTarget) {
+            this._numberDraft = undefined;
+            this.requestUpdate();
+          }
+        }}
         @value-changed=${(ev: CustomEvent) => {
           // ha-form re-fires a consolidated event (detail.value = full data
           // object); keep it from bubbling out into HA's dialog.
           ev.stopPropagation();
-          const raw = diffFormValue(spec.data, ev.detail.value as Record<string, unknown>, spec.fields);
+          const raw = diffFormValue(data, ev.detail.value as Record<string, unknown>, spec.fields);
+          const changed = Object.keys(raw);
+          const field = changed.length === 1 ? spec.fields.find((f) => f.name === changed[0]) : undefined;
+          const form = ev.currentTarget as HTMLElement;
+          // HA emits on every keystroke. Keep an in-progress number in its
+          // input while the config uses the normalized value: otherwise the
+          // first "9" in "96" clamps to 10 and the next digit produces 106.
+          // Blur restores the normalized value, including empty required fields.
+          if (field && "number" in field.selector && form.matches(":focus-within")) {
+            this._numberDraft = { form, name: field.name, value: raw[field.name] };
+            this.requestUpdate();
+          }
           const patch = normalizeFormPatch(raw, spec.fields);
           const names = Object.keys(patch);
           if (!names.length) return;
@@ -4254,8 +4326,9 @@ export class FloorplanCardEditor extends LitElement {
     return html`<div class="essential-fields">
       ${formSlice(spec, names).fields.map((field) => {
         const number = field.selector.number as Record<string, unknown> | undefined;
-        const compact = number ? { ...field, selector: { number: { ...number, mode: "box" } } } : field;
-        const compactColumn = number || field.name === "goToFloor" || field.name === "hand";
+        const compact = number ? { ...field, selector: { number: { ...number, mode: "box" } } }
+          : field.name === "goToFloor" ? { ...field, helper: "Tap this object to change floors." } : field;
+        const compactColumn = number || field.name === "hand";
         return html`<div class=${compactColumn ? "essential-field" : "essential-field full"}>
           ${this._renderForm({ ...spec, fields: [compact] }, apply)}
         </div>`;
@@ -4542,6 +4615,7 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   private _setInspector(project: boolean): void {
+    this._numberDraft = undefined;
     this._projectOpen = project;
     this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
   }
@@ -4574,12 +4648,14 @@ export class FloorplanCardEditor extends LitElement {
     const done = this.renderRoot.querySelector<HTMLElement>(".canvas-jump");
     const selected = this.renderRoot.querySelector<Element>(".stage .selected");
     const wrap = this._canvasWrap;
-    if (!done?.offsetParent || !wrap || !selected) return;
+    if (!done?.getClientRects().length || !wrap?.clientHeight || !selected) return;
     const view = wrap.getBoundingClientRect();
     const target = selected.getBoundingClientRect();
-    if (target.left < view.left || target.right > view.right || target.top < view.top || target.bottom > view.bottom) {
-      wrap.scrollBy({ left: (target.left + target.right - view.left - view.right) / 2,
-        top: (target.top + target.bottom - view.top - view.bottom) / 2 });
+    const right = view.left + wrap.clientWidth;
+    const bottom = view.top + wrap.clientHeight;
+    if (target.left < view.left || target.right > right || target.top < view.top || target.bottom > bottom) {
+      wrap.scrollBy({ left: (target.left + target.right - view.left - right) / 2,
+        top: (target.top + target.bottom - view.top - bottom) / 2 });
     }
   }
 
@@ -4739,11 +4815,22 @@ export class FloorplanCardEditor extends LitElement {
     // Header names the selection and carries its actions, so everything about
     // the selected element lives in one place (the context bar stays tool-only).
     const summary = n > 1 ? `${n} elements selected` : this._selectionSummary(sel);
-    const icon = n > 1 ? "mdi:select-group" : SEL_KIND_ICON[sel.kind];
+    const furniture = n === 1 && sel.kind === "furniture" ? this._floor().furniture.find((f) => f.id === sel.id) : undefined;
+    const item = n === 1 && sel.kind === "item" ? this._floor().items.find((it) => it.id === sel.id) : undefined;
+    const opening = n === 1 && sel.kind === "opening" ? this._floor().openings.find((o) => o.id === sel.id) : undefined;
+    const icon = n > 1 ? "mdi:select-group" : item
+      ? resolveItemIcon(item, this.hass?.states[item.entity], this.hass?.entities?.[item.entity]?.icon)
+      : opening ? TOOL_META[opening.type].icon : SEL_KIND_ICON[sel.kind];
     return html`
       <section class="edit-area">
         <div class="edit-head">
-          <ha-icon icon=${icon}></ha-icon>
+          ${furniture ? (() => {
+            const { w, h } = symbolSize(furniture.type, this._symbols());
+            const pad = Math.max(w, h) * .2 + 6;
+            return html`<svg class="selection-symbol" aria-hidden="true" viewBox=${`${-w / 2 - pad} ${-h / 2 - pad} ${w + 2 * pad} ${h + 2 * pad}`}>
+              ${renderFurniture({ ...furniture, x: 0, y: 0, angle: 0, w, h }, "currentColor", this._symbols())}
+            </svg>`;
+          })() : html`<ha-icon icon=${icon} aria-hidden="true"></ha-icon>`}
           <span class="edit-title" title=${summary}>${summary}</span>
           <span class="head-spacer"></span>
           ${(() => {
@@ -4784,7 +4871,9 @@ export class FloorplanCardEditor extends LitElement {
           : html`
               ${this._renderPagePicker(SELECTION_PAGES[sel.kind], false)}
               ${this._renderAreaScopeHint()}
-              <div class="rows ${this._selectionPage === "properties" ? "essential-properties" : "category-properties"}">${this._renderSelectionEditor()}</div>`}
+              <div id="object-settings-page" role=${SELECTION_PAGES[sel.kind].length > 1 ? "tabpanel" : nothing}
+                aria-labelledby=${SELECTION_PAGES[sel.kind].length > 1 ? `object-category-${this._selectionPage}` : nothing}
+                class="rows ${this._selectionPage === "properties" ? "essential-properties" : "category-properties"}">${this._renderSelectionEditor()}</div>`}
       </section>
     `;
   }
@@ -5588,7 +5677,9 @@ export class FloorplanCardEditor extends LitElement {
     return html`
       <section class="panel">
         ${this._renderPagePicker(PROJECT_PAGES, true)}
-        ${this._renderPanelBody()}
+        <div id="project-settings-page" role="tabpanel" aria-labelledby=${`project-category-${this._projectPage}`}>
+          ${this._renderPanelBody()}
+        </div>
       </section>
     `;
   }
@@ -6161,7 +6252,9 @@ export class FloorplanCardEditor extends LitElement {
         this._applyElementPatch("opening", o.id, patch, live);
       };
       if (this._selectionPage === "properties") return html`
-        ${this._renderEssentialForm(spec, FloorplanCardEditor.OPENING_GROUPS[0][1], apply)}
+        ${this._renderEssentialForm(spec, ["length", "width", "angle", "ceilingHeight"], apply)}
+        ${this._renderEssentialForm(spec, FloorplanCardEditor.OPENING_GROUPS[0][1].filter((name) =>
+          !["length", "width", "angle", "ceilingHeight"].includes(name)), apply)}
       `;
       /** A group, skipped when this opening has none of its fields. */
       const group = (title: string, names: readonly string[], ...extra: unknown[]) => {
@@ -6384,12 +6477,13 @@ export class FloorplanCardEditor extends LitElement {
       const fApply = (patch: Record<string, unknown>, live: boolean) =>
         this._applyElementPatch("furniture", f.id, patch, live);
       if (this._selectionPage === "properties") return html`
-        ${this._renderEssentialForm(fSpec, ["type", "w", "h", "angle", "hand", ...(f.type === "stairs" ? ["goToFloor"] : [])], fApply)}
+        ${this._renderEssentialForm(fSpec, ["w", "h", "angle", ...(f.type === "stairs" ? ["goToFloor"] : []), "hand"], fApply)}
         ${this._renderColorRow({
           label: "Color", value: f.color, swatch: "#9e9e9e", placeholder: "Default",
           onLive: (color) => this._updateFurnitureLive(f.id, { color }),
           onCommit: (color) => this._updateFurniture(f.id, { color }),
         })}
+        <div class="secondary-property">${this._renderEssentialForm(fSpec, ["type"], fApply)}</div>
       `;
       return html`
         ${FloorplanCardEditor.FURNITURE_GROUPS.filter(([title]) => title !== "Shape").map(([title, names]) =>

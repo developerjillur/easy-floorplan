@@ -58,9 +58,7 @@ async function mountWithItemSelected() {
   await ed.updateComplete;
 
   const root = () => ed.shadowRoot!;
-  const category = root().querySelector<HTMLSelectElement>('[aria-label="Object settings category"]')!;
-  category.value = "visibility";
-  category.dispatchEvent(new Event("change", { bubbles: true }));
+  root().querySelector<HTMLButtonElement>('#object-category-visibility')!.click();
   await ed.updateComplete;
 
   return {

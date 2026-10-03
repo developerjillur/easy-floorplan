@@ -352,9 +352,7 @@ async function openSwitcherPanel(ed: FloorplanCardEditor): Promise<HTMLInputElem
   const root = ed.shadowRoot!;
   root.querySelector<HTMLButtonElement>("#project-tab")?.click();
   await ed.updateComplete;
-  const category = root.querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
-  category.value = "plan";
-  category.dispatchEvent(new Event("change", { bubbles: true }));
+  root.querySelector<HTMLButtonElement>('#project-category-plan')!.click();
   await ed.updateComplete;
   const group = root.querySelector<HTMLElement>('[data-group="Floor switcher"]')!;
   return [...group.querySelectorAll<HTMLInputElement>("input[type=number]")];

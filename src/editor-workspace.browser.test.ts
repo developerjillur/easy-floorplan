@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "./editor";
 import type { FloorplanCardEditor } from "./editor";
 import type { FloorplanCardConfig } from "./types";
@@ -29,7 +29,7 @@ async function mount(width: number) {
   return { editor, root, el, rect: (selector: string) => el(selector).getBoundingClientRect() };
 }
 
-afterEach(() => { document.body.innerHTML = ""; });
+afterEach(() => { document.body.innerHTML = ""; vi.unstubAllGlobals(); });
 
 describe("responsive editor workspace", () => {
   it("docks the tools and inspector beside a fully visible tall plan", async () => {
@@ -256,12 +256,11 @@ describe("responsive editor workspace", () => {
     const t = await mount(1300);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
-    const picker = t.el('[aria-label="Object settings category"]') as HTMLSelectElement;
+    const picker = t.el('[aria-label="Object settings"]');
     expect(t.root.querySelector("#field-type")).not.toBeNull();
     const seen = new Set<string>();
-    for (const option of picker.options) {
-      picker.value = option.value;
-      picker.dispatchEvent(new Event("change", { bubbles: true }));
+    for (const option of picker.querySelectorAll<HTMLButtonElement>("button")) {
+      option.click();
       await settle(t.editor);
       expect(t.root.querySelector("button.cfg-group-title")).toBeNull();
       for (const field of t.root.querySelectorAll<HTMLInputElement>('[id^="field-"]')) {
@@ -301,17 +300,15 @@ describe("responsive editor workspace", () => {
     const t = await mount(360);
     t.el(".project-settings").click();
     await settle(t.editor);
-    const picker = t.el('[aria-label="Project settings category"]') as HTMLSelectElement;
-    picker.value = "view";
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    const picker = t.el('[role="tablist"][aria-label="Project settings"]');
+    t.el("#project-category-view").click();
     await settle(t.editor);
     t.el(".side").scrollTop = t.el(".side").scrollHeight;
     await settle(t.editor);
     const category = picker.getBoundingClientRect();
     expect(category.top).toBeGreaterThanOrEqual(t.rect(".inspector-heading").bottom);
     expect(category.bottom).toBeLessThan(t.rect(".side").bottom);
-    picker.value = "plan";
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    t.el("#project-category-plan").click();
     await settle(t.editor);
     expect(t.el(".side").scrollTop).toBe(0);
     expect(t.el("#field-title").checkVisibility()).toBe(true);
@@ -359,9 +356,7 @@ describe("responsive editor workspace", () => {
     const emitted: FloorplanCardConfig[] = [];
     t.editor.addEventListener("config-changed", (event) => emitted.push((event as CustomEvent).detail.config));
     if (test.kind === "opening") {
-      const picker = t.el('[aria-label="Object settings category"]') as HTMLSelectElement;
-      picker.value = "sensors";
-      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      t.el("#object-category-sensors").click();
       await settle(t.editor);
     }
     const field = t.el(`#field-${test.field}`) as HTMLInputElement;
@@ -376,14 +371,13 @@ describe("responsive editor workspace", () => {
     if (test.kind === "opening") expect(element.type).toBe("window");
     if (test.kind === "text") expect(element.attribute).toBeUndefined();
     // Changing objects returns to its primary properties without carrying the old category.
-    const picker = t.root.querySelector<HTMLSelectElement>('[aria-label="Object settings category"]');
+    const picker = t.root.querySelector<HTMLElement>('[aria-label="Object settings"]');
     if (picker) {
-      picker.value = picker.options[picker.options.length - 1].value;
-      picker.dispatchEvent(new Event("change", { bubbles: true }));
+      picker.querySelector<HTMLButtonElement>("button:last-child")!.click();
       await settle(t.editor);
       (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
       await settle(t.editor);
-      expect((t.el('[aria-label="Object settings category"]') as HTMLSelectElement).value).toBe("properties");
+      expect(t.el("#object-category-properties").getAttribute("aria-selected")).toBe("true");
       expect(t.root.querySelector("#field-w")).not.toBeNull();
     }
   });
@@ -402,6 +396,156 @@ describe("responsive editor workspace", () => {
     expect(t.el(".canvas-column").checkVisibility()).toBe(true);
     expect(t.el(".side").checkVisibility()).toBe(false);
     expect(t.root.querySelector(".inspector-jump")).toBeNull();
+  });
+
+  it("puts sizing first, draws the selected symbol and supports keyboard category navigation", async () => {
+    const t = await mount(1300);
+    const c = config();
+    c.floors![0].furniture[0].type = "stairs";
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    expect(t.rect("#field-w").top).toBeLessThan(t.rect("#field-type").top);
+    expect(t.root.querySelector(".selection-symbol .fp-furniture-stairs")).not.toBeNull();
+    expect(t.rect(".selection-symbol").left).toBeGreaterThan(t.rect(".side").left);
+    const properties = t.el("#object-category-properties");
+    properties.focus();
+    properties.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, composed: true }));
+    await settle(t.editor);
+    expect(t.root.activeElement).toBe(t.el("#object-category-sensor"));
+    expect(t.el("#object-settings-page").getAttribute("aria-labelledby")).toBe("object-category-sensor");
+    expect(t.root.querySelector("#field-entity")).not.toBeNull();
+    t.el("#object-category-sensor").dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, composed: true }));
+    await settle(t.editor);
+    expect(t.root.activeElement).toBe(t.el("#object-category-actions"));
+    expect(t.el("#selection-tab").getAttribute("aria-selected")).toBe("true");
+  });
+
+  it.each([320, 360, 560, 780, 1300])("shows every project destination without a menu at %ipx", async (width) => {
+    const t = await mount(width);
+    t.el(".project-settings").click();
+    await settle(t.editor);
+    const buttons = [...t.root.querySelectorAll<HTMLElement>(".settings-category button")];
+    expect(buttons).toHaveLength(6);
+    for (const button of buttons) {
+      const rect = button.getBoundingClientRect();
+      expect(rect.left).toBeGreaterThanOrEqual(t.rect(".side").left);
+      expect(rect.right).toBeLessThanOrEqual(t.rect(".side").right);
+      expect(rect.bottom).toBeLessThan(t.rect(".side").bottom);
+      expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+      if (width < 760) expect(rect.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  it("gives phone fields more space without losing edits or the plan view", async () => {
+    const t = await mount(360);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    const height = t.rect(".side").height;
+    t.el(".preview-toggle").click();
+    await settle(t.editor);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(false);
+    expect(t.rect(".side").height).toBeGreaterThan(height + 100);
+    expect(t.el(".preview-toggle").textContent?.trim()).toBe("Show plan");
+    const width = t.el("#field-w") as HTMLInputElement;
+    width.value = "240";
+    width.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(t.editor);
+    t.el(".preview-toggle").click();
+    await settle(t.editor);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(true);
+    expect((t.el("#field-w") as HTMLInputElement).value).toBe("240");
+  });
+
+  it("adapts fullscreen height to the visual viewport and restores it after keyboard dismissal", async () => {
+    const viewport = Object.assign(new EventTarget(), { height: window.innerHeight, offsetTop: 0, scale: 1 });
+    vi.stubGlobal("visualViewport", viewport);
+    const t = await mount(360);
+    t.el(".expand-toggle").click();
+    await settle(t.editor);
+    t.el(".project-settings").click();
+    await settle(t.editor);
+    t.el("#field-title").focus();
+    viewport.height -= 280;
+    viewport.dispatchEvent(new Event("resize"));
+    await settle(t.editor);
+    expect(t.el(".editor").classList.contains("keyboard-open")).toBe(true);
+    expect(t.rect(".editor").height).toBeCloseTo(viewport.height, 0);
+    expect(t.rect(".side").bottom).toBeLessThanOrEqual(viewport.height + 1);
+    viewport.height = window.innerHeight;
+    viewport.dispatchEvent(new Event("resize"));
+    await settle(t.editor);
+    expect(t.el(".editor").classList.contains("keyboard-open")).toBe(false);
+    expect(t.rect(".editor").height).toBeCloseTo(window.innerHeight, 0);
+  });
+
+  it("temporarily hides the phone preview while a keyboard occupies the visual viewport", async () => {
+    const viewport = Object.assign(new EventTarget(), { height: window.innerHeight, offsetTop: 0, scale: 1 });
+    vi.stubGlobal("visualViewport", viewport);
+    const t = await mount(360);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    t.el("#field-w").focus();
+    viewport.height -= 280;
+    viewport.dispatchEvent(new Event("resize"));
+    await settle(t.editor);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(false);
+    expect(t.el(".side").checkVisibility()).toBe(true);
+    expect(t.el(".preview-toggle").checkVisibility()).toBe(false);
+    viewport.height = window.innerHeight;
+    viewport.dispatchEvent(new Event("resize"));
+    await settle(t.editor);
+    expect(t.el(".canvas-column").checkVisibility()).toBe(true);
+    expect((t.el("#field-w") as HTMLInputElement).value).toBe("180");
+  });
+
+  it("preserves fitted drawing scale when opening a phone object preview", async () => {
+    const t = await mount(360);
+    const c = config();
+    c.height = 720;
+    c.floors![0].furniture[0].y = 550;
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    const zoom = t.el(".zoom-val-btn").textContent;
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    expect(t.el(".zoom-val-btn").textContent).toBe(zoom);
+    const selected = t.rect(".stage .selected");
+    expect(selected.top).toBeGreaterThanOrEqual(t.rect(".canvas-wrap").top);
+    expect(selected.bottom).toBeLessThanOrEqual(t.rect(".canvas-wrap").top + t.el(".canvas-wrap").clientHeight);
+  });
+
+  it("pinches a narrow canvas without changing objects and clears canceled touches", async () => {
+    const t = await mount(360);
+    const svg = t.el(".stage svg");
+    const wrap = t.rect(".canvas-wrap");
+    const emitted: unknown[] = [];
+    t.editor.addEventListener("config-changed", (event) => emitted.push(event));
+    const touch = (type: string, id: number, x: number) => svg.dispatchEvent(new PointerEvent(type, {
+      pointerType: "touch", pointerId: id, clientX: wrap.left + x, clientY: wrap.top + 150,
+      bubbles: true, composed: true, cancelable: true, button: 0, buttons: type === "pointercancel" ? 0 : 1,
+    }));
+    const zoom = () => Number(t.el(".zoom-val-btn").textContent!.replace("%", "").trim());
+    const initial = zoom();
+    touch("pointerdown", 21, 70);
+    touch("pointerdown", 22, 150);
+    touch("pointermove", 22, 210);
+    await settle(t.editor);
+    expect(zoom()).toBeGreaterThan(initial);
+    touch("pointercancel", 21, 70);
+    touch("pointercancel", 22, 210);
+    const after = zoom();
+    touch("pointerdown", 23, 70);
+    touch("pointermove", 23, 90);
+    touch("pointercancel", 23, 90);
+    await settle(t.editor);
+    expect(zoom()).toBe(after);
+    expect(emitted).toEqual([]);
   });
 
 });

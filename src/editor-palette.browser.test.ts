@@ -62,9 +62,7 @@ async function openColors(ed: FloorplanCardEditor): Promise<void> {
     project.click();
     await ed.updateComplete;
   }
-  const category = root().querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
-  category.value = "colors";
-  category.dispatchEvent(new Event("change", { bubbles: true }));
+  root().querySelector<HTMLButtonElement>('#project-category-colors')!.click();
   await ed.updateComplete;
 }
 
@@ -79,9 +77,7 @@ async function openNamedColors(ed: FloorplanCardEditor): Promise<void> {
     await ed.updateComplete;
   }
 
-  const category = root().querySelector<HTMLSelectElement>('[aria-label="Project settings category"]')!;
-  category.value = "colors";
-  category.dispatchEvent(new Event("change", { bubbles: true }));
+  root().querySelector<HTMLButtonElement>('#project-category-colors')!.click();
   await ed.updateComplete;
 }
 

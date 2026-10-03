@@ -5,7 +5,7 @@ export const editorWorkspaceStyles = css`
   :host { display: block; min-width: 0; }
   .editor {
     --editor-ink: var(--primary-text-color, #24323d);
-    --editor-muted: var(--secondary-text-color, #697781);
+    --editor-muted: var(--secondary-text-color, #586772);
     --editor-paper: var(--card-background-color, #fff);
     --editor-ground: var(--secondary-background-color, #f3f5f7);
     --editor-line: var(--divider-color, #dfe5e9);
@@ -19,7 +19,7 @@ export const editorWorkspaceStyles = css`
     border: 1px solid var(--editor-line);
     border-radius: 12px;
     font: inherit;
-    font-size: 13px;
+    font-size: 14px;
   }
   button, input, select { font: inherit; }
   button {
@@ -59,7 +59,7 @@ export const editorWorkspaceStyles = css`
   .add-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: none; }
   .add-pop .furn-search { flex: none; }
   .toolbar .add-entry { justify-content: flex-start; }
-  .toolbar .furn-cell { padding: 7px 3px; font-size: 11px; min-height: 70px; justify-content: flex-start; }
+  .toolbar .furn-cell { padding: 7px 3px; font-size: 12px; min-height: 70px; justify-content: flex-start; }
   .furn-cell svg { flex-shrink: 0; }
   .add-furn-scroll { scrollbar-width: thin; min-height: 0; }
   .floors .pop { left: 0; right: auto; }
@@ -121,10 +121,10 @@ export const editorWorkspaceStyles = css`
   .zoom-overlay ha-icon { --mdc-icon-size: 17px; }
   .context-bar { margin: 0; padding: 7px 12px; gap: 8px; background: var(--editor-paper); border: 0; border-top: 1px solid var(--editor-line); border-radius: 0; }
   .context-bar .ctx-label { border: 0; padding: 0; text-transform: none; letter-spacing: 0; font-size: 12px; }
-  .context-bar .ctx-hint { font-size: 11px; line-height: 1.5; }
+  .context-bar .ctx-hint { font-size: 12px; line-height: 1.5; }
   .context-bar .ctx-divider { margin-left: auto; }
-  .context-bar button { font-size: 11px; min-height: 28px; padding: 4px 8px; }
-  .snap-control { display: flex; align-items: center; gap: 6px; color: var(--editor-muted); font-size: 11px; white-space: nowrap; }
+  .context-bar button { font-size: 12px; min-height: 32px; padding: 4px 8px; }
+  .snap-control { display: flex; align-items: center; gap: 6px; color: var(--editor-muted); font-size: 12px; white-space: nowrap; }
   .snap-control select { min-height: 30px; padding: 3px 6px; border: 1px solid var(--editor-line); border-radius: 6px; color: var(--editor-ink); background: var(--editor-paper); }
   .ctx-count { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .context-bar .ctx-label { display: none; }
@@ -134,29 +134,30 @@ export const editorWorkspaceStyles = css`
   .inspector-tabs button { min-height: 42px; padding: 10px 2px; border: 0; border-radius: 0; border-bottom: 2px solid transparent; color: var(--editor-muted); background: transparent; font-weight: 600; }
   .inspector-tabs button[aria-selected="true"] { color: var(--editor-accent); border-bottom-color: var(--editor-accent); }
   .inspector-tabs button:hover { color: var(--editor-accent); background: transparent; }
-  .canvas-jump { min-height: 40px; padding: 5px; border: 0; color: var(--editor-accent); font-size: 11px; }
+  .canvas-jump, .preview-toggle { min-height: 44px; padding: 5px; border: 0; color: var(--editor-accent); font-size: 12px; }
+  .preview-toggle { margin-left: auto; }
   .context-bar .inspector-jump { color: var(--editor-accent); margin-left: auto; }
   .edit-area, .panel { border: 0; border-radius: 0; padding: 16px; }
   .panel { border: 0; }
   .panel-body { margin-top: 0; }
   .side .rows { display: flex; flex-direction: column; gap: 0; }
   .side .rows > * { width: 100%; box-sizing: border-box; }
-  .edit-head { display: grid; grid-template-columns: 22px minmax(0, 1fr) repeat(3, 30px); gap: 5px; padding-bottom: 18px; margin: 0; }
+  .edit-head { display: grid; grid-template-columns: 28px minmax(0, 1fr) repeat(3, 32px); gap: 4px; padding-bottom: 14px; margin: 0; }
   .edit-head .head-spacer { display: none; }
-  .edit-head .edit-title { font-size: 13px; }
+  .edit-head .edit-title { font-size: 14px; white-space: normal; line-height: 1.4; }
+  .selection-symbol { position: static; display: block; width: 28px; height: 32px; color: var(--editor-ink); }
   .edit-head button { min-height: 30px; padding: 5px; justify-content: center; border-color: transparent; }
   .cfg-group { width: 100%; margin: 0; padding: 16px 0 0; border: 0; }
   .cfg-group + .cfg-group { border-top: 1px solid var(--editor-line); margin-top: 12px; }
-  .cfg-group-title { min-height: 0; margin: 0 0 14px; padding: 0; font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--editor-ink); }
-  .settings-category { position: sticky; top: 43px; z-index: 1; display: flex; align-items: center; gap: 10px; margin: 0 0 4px; padding-bottom: 12px; color: var(--editor-muted); background: var(--editor-paper); font-size: 11px; }
-  .settings-category > select { min-width: 0; flex: 1; min-height: 36px; padding: 7px 9px; color: var(--editor-ink); background: var(--editor-ground); border: 1px solid var(--editor-line); border-radius: 6px; font-size: 12px; font-weight: 600; }
-  .panel .settings-category { display: block; }
-  .panel .settings-category > span { display: none; }
-  .panel .settings-category > select { width: 100%; }
+  .cfg-group-title { min-height: 0; margin: 0 0 14px; padding: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--editor-ink); }
+  .settings-category { position: sticky; top: 43px; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 0 0 16px; padding: 6px 0; background: var(--editor-paper); border-bottom: 1px solid var(--editor-line); }
+  .settings-category.two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-category > button { min-width: 0; min-height: 36px; padding: 7px 4px; color: var(--editor-muted); background: transparent; border: 1px solid transparent; border-radius: 6px; font-size: 13px; font-weight: 500; }
+  .settings-category > button[aria-selected="true"] { color: var(--editor-accent); background: color-mix(in srgb, var(--editor-accent) 10%, var(--editor-paper)); border-color: color-mix(in srgb, var(--editor-accent) 25%, var(--editor-line)); font-weight: 600; }
   .side .row { gap: 8px; margin-bottom: 12px; }
-  .side .row label { font-size: 12px; flex-basis: 94px; color: var(--editor-muted); }
+  .side .row label { font-size: 13px; flex-basis: 94px; color: var(--editor-ink); }
   .side .row.col > label { flex-basis: auto; }
-  .side .row input[type="text"], .side .row input[type="number"], .side .row select { min-height: 34px; box-sizing: border-box; padding: 7px 9px; border-radius: 6px; border-color: var(--editor-line); font-size: 12px; }
+  .side .row input[type="text"], .side .row input[type="number"], .side .row select { min-height: 38px; box-sizing: border-box; padding: 7px 9px; border-radius: 6px; border-color: var(--editor-line); font-size: 14px; }
   .side .row input.num { flex: 1; width: 0; }
   .side .row input[type="range"] { flex: 1; width: 0; min-width: 0; accent-color: var(--editor-accent); }
   .side .row input[type="range"] + input.num { flex: 0 0 62px; min-width: 62px; }
@@ -169,10 +170,10 @@ export const editorWorkspaceStyles = css`
   /* The popover top layer escapes HA's transformed edit dialog. */
   .editor.fullscreen {
     position: fixed;
-    inset: 0;
+    inset: var(--editor-viewport-top, 0px) 0 auto;
     z-index: 100;
     width: auto;
-    height: auto;
+    height: var(--editor-viewport-height, 100dvh);
     max-width: none;
     max-height: none;
     margin: 0;
@@ -198,6 +199,8 @@ export const editorWorkspaceStyles = css`
   .essential-properties > .row { flex-wrap: wrap; }
   .essential-properties > .row > label { flex-basis: 100%; }
   .essential-properties > .row input[type="text"] { flex: 1; min-width: 0; }
+  .secondary-property { border-top: 1px solid var(--editor-line); padding-top: 16px; margin-top: 4px; }
+  .secondary-property .essential-fields { margin-bottom: 0; }
   @container workspace (min-width: 760px) {
     .workspace {
       grid-template-columns: minmax(0, 1fr) 280px;
@@ -206,13 +209,13 @@ export const editorWorkspaceStyles = css`
     }
     .tool-rail { display: none; }
     .side { border-top: 0; border-left: 1px solid var(--editor-line); }
-    .inspector-jump, .canvas-jump { display: none; }
+    .inspector-jump, .canvas-jump, .preview-toggle { display: none; }
     .context-bar > .ctx-hint { flex: 1 1 140px; }
   }
   @container workspace (min-width: 1000px) {
-    .workspace { grid-template-columns: 64px minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr); }
+    .workspace { grid-template-columns: 72px minmax(0, 1fr) 316px; grid-template-rows: minmax(0, 1fr); }
     .tool-rail { grid-column: auto; display: flex; flex-direction: column; padding: 6px; border-bottom: 0; border-right: 1px solid var(--editor-line); overflow-y: auto; overflow-x: hidden; }
-    .tool-rail button { flex: 0 0 auto; min-height: 50px; padding: 6px 2px; font-size: 10px; gap: 4px; }
+    .tool-rail button { flex: 0 0 auto; min-height: 54px; padding: 6px 2px; font-size: 12px; gap: 4px; }
   }
   @container workspace (max-width: 999px) {
     .toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; padding: 8px; gap: 6px; }
@@ -254,13 +257,17 @@ export const editorWorkspaceStyles = css`
     .essential-properties > .row > label { flex-basis: 100%; }
     .edit-head { grid-template-columns: 20px minmax(0, 1fr) repeat(3, 36px); }
     .edit-head button { min-height: 40px; }
-    .settings-category > select { min-height: 40px; }
   }
   @container workspace (max-width: 399px) {
     .expand-label, .floors > ha-icon { display: none; }
     .toolbar .expand-toggle { padding: 7px; }
     .editor-brand > ha-icon { display: none; }
     .floors select { max-width: 115px; }
+  }
+  @container workspace (max-width: 339px) {
+    .tool-compact ha-icon { display: none; }
+    .tool-compact { padding: 0 4px; }
+    .canvas-heading .icon-btn { font-size: 0; gap: 0; width: 44px; padding: 5px; }
   }
   @container workspace (min-width: 600px) and (max-width: 999px) {
     .toolbar { display: flex; flex-wrap: nowrap; }
@@ -271,22 +278,38 @@ export const editorWorkspaceStyles = css`
     .editor.fullscreen .toolbar .add-pop { max-height: calc(100dvh - 70px); }
   }
   @container workspace (max-width: 759px) {
+    .toolbar button, .tool-compact select, .canvas-heading button, .floors select, .zoom-overlay button, .snap-control select, .context-bar .inspector-jump { min-height: 44px; }
+    .toolbar .project-settings { min-height: 44px; min-width: 40px; }
+    .toolbar .history button, .toolbar .expand-toggle, .floors > button { min-width: 44px; }
+    .inspector-heading { padding: 0 12px; gap: 4px; }
+    .inspector-tabs { gap: 10px; }
+    .inspector-tabs button { min-height: 44px; }
+    .settings-category { top: 45px; margin-bottom: 12px; }
+    .settings-category > button { min-height: 44px; }
+    .edit-head { grid-template-columns: 28px minmax(0, 1fr) repeat(3, 44px); }
+    .edit-head button { min-height: 44px; }
+    .side .row input[type="text"], .side .row input[type="number"], .side .row select { min-height: 44px; font-size: 16px; }
+    .side .row label, .side .hint { font-size: 13px; }
     .side { display: none; border-top: 1px solid var(--editor-line); }
-    .show-inspector .workspace { grid-template-rows: minmax(140px, .4fr) minmax(200px, .6fr); }
+    .show-inspector .workspace { grid-template-rows: minmax(130px, .28fr) minmax(200px, .72fr); }
     .show-inspector .side { display: flex; }
     .show-inspector .canvas-heading, .show-inspector .context-bar { display: none; }
     .show-inspector .canvas-outer { padding: 6px; }
     .show-inspector .zoom-overlay { position: static; align-self: flex-end; margin-top: 4px; flex: none; box-shadow: none; }
-    .show-inspector .zoom-overlay button { min-height: 28px; }
+    .show-inspector .zoom-overlay button { min-height: 36px; }
     .show-inspector .edit-area, .show-inspector .panel { padding-top: 10px; }
     .show-inspector .edit-head { padding-bottom: 8px; }
+    .show-inspector.preview-collapsed .workspace, .show-inspector.keyboard-open .workspace { grid-template-rows: minmax(0, 1fr); }
+    .show-inspector.preview-collapsed .canvas-column, .show-inspector.keyboard-open .canvas-column { display: none; }
+    .keyboard-open .preview-toggle { display: none; }
+    .keyboard-open:not(.fullscreen) .workspace { height: max(180px, calc(var(--editor-viewport-height, 100dvh) - 160px)); }
   }
   @media (max-height: 500px) {
     @container workspace (max-width: 759px) {
-      .show-inspector .workspace { grid-template-rows: minmax(90px, .35fr) minmax(140px, .65fr); }
+      .show-inspector:not(.preview-collapsed):not(.keyboard-open) .workspace { grid-template-rows: minmax(90px, .3fr) minmax(140px, .7fr); }
     }
     @container workspace (min-width: 600px) and (max-width: 759px) {
-      .show-inspector .workspace { grid-template-columns: minmax(0, 1fr) 280px; grid-template-rows: minmax(0, 1fr); }
+      .show-inspector:not(.preview-collapsed):not(.keyboard-open) .workspace { grid-template-columns: minmax(0, 1fr) 280px; grid-template-rows: minmax(0, 1fr); }
       .show-inspector .side { border-top: 0; border-left: 1px solid var(--editor-line); }
     }
   }
