@@ -1759,6 +1759,8 @@ export interface FloorplanCardConfig extends LovelaceCardConfig {
   projection?: "plan" | "iso";
   /** Display mode. Takes precedence over the prototype `projection` key. */
   view?: "2d" | "3d";
+  /** Show a button to download static line art of the active floor as SVG. */
+  showExport?: boolean;
   /** Opacity of standing walls, 0..1. Default 1; ignored in 2D. */
   wallOpacity?: number;
   /**

@@ -539,6 +539,37 @@ was rotated (issue #280).
 
 <a id="isometric-view"></a>
 
+## SVG export
+
+Add `showExport: true` to the card YAML, then select a floor and press **Export SVG**
+below the plan. The download uses the current 2D or 3D view and display rotation,
+including orientation overrides. It always includes the full canvas, even while
+zoomed into a room. Open the SVG directly in a browser, print it, or insert it into
+a document or vector editor.
+
+![Downloaded 3D line-art example](img/line-art-example.svg)
+
+```yaml
+showExport: true
+view: 3d
+wallHeight: 60
+```
+
+The file contains black-on-white walls, openings, furniture (including custom
+symbols), dividers and room names. It needs no Home Assistant connection, theme,
+external fonts or linked images. Openings use their static drawing convention:
+swing doors open and windows closed, respecting the configured inversion.
+Background images, free text, device badges, entity readings, lighting
+and replay state are omitted. The live card is unchanged by exporting.
+
+Standing faces are opaque and use the existing 3D painter's ordering to cover
+geometry behind them. This is an illustration in canvas units, not a survey or
+a general hidden-line CAD export. White faces and SVG masks remain in the file;
+it is intended for printing and documents, not optimised pen-plotter paths.
+
+Try the [local export preview](../docker/README.md#svg-export-preview) to switch
+views and floors and download the example drawing.
+
 ## 3D view
 
 Choose **Project → Display → View → 3D isometric** to see the plan from a corner.

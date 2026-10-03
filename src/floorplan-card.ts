@@ -170,6 +170,7 @@ import {
   type DisplayFrame,
 } from "./projection";
 import { openingSolids } from "./projection-openings";
+import { downloadLineArtSvg } from "./line-art-export";
 import { AmountTween, OPENING_TWEEN_MS, rafTweenFrames } from "./opening-tween";
 import { focusOrder, normalizeRoomFocus, stepFocus } from "./room-focus";
 import type { SVGTemplateResult } from "lit";
@@ -1992,6 +1993,11 @@ export class FloorplanCard extends LitElement {
             : nothing}
         </div>
         </div>
+        ${c.showExport ? html`<div class="export-bar">
+          <button type="button" title=${`Download line art of ${active.name} as SVG`}
+            @click=${() => downloadLineArtSvg(c, active, rot)}>Export SVG</button>
+        </div>` : nothing}
+        </div>
       </ha-card>
     `;
   }
@@ -2327,6 +2333,22 @@ export class FloorplanCard extends LitElement {
       padding: 4px;
       line-height: 0;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .export-bar {
+      display: flex;
+      flex: 0 0 auto;
+      justify-content: flex-end;
+      padding: 4px 8px 8px;
+    }
+    .export-bar button {
+      font: inherit;
+      font-size: 12px;
+      color: var(--primary-text-color, #222);
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #ccc);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
     }
     .zoom-out {
       position: absolute;

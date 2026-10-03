@@ -20,6 +20,7 @@ Back to the [README](../README.md).
 | `rotationLandscape` | number | (same as `rotation`) | Rotation to use while the screen is landscape. The mirror of `rotationPortrait`; set either, or both. |
 | `view` | string | `2d` | `3d` shows standing walls, openings and furniture. Display only; the editor stays flat. See [3D view](appearance.md#3d-view). |
 | `projection` | string | `plan` | Prototype alias: `iso` selects 3D when `view` is unset. |
+| `showExport` | boolean | `false` | Show **Export SVG** below the card. Downloads static line art of the active floor in the current view and rotation. See [SVG export](appearance.md#svg-export). |
 | `wallHeight` | number | `60` | Standing wall height in canvas units, clamped to 0–400. Ignored in 2D. |
 | `wallOpacity` | number | `1` | Standing wall opacity, clamped to 0–1. Furniture and opening panels keep their own paint. Ignored in 2D. |
 | `showDeadSpaces` | boolean | `false` | Hatch every space the walls seal off that no door or window reaches, worked out from the walls and openings themselves. See [Dead spaces](behavior.md#dead-spaces). |

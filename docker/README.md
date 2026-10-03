@@ -296,6 +296,22 @@ the sunlight patch remained even at 0% because the rolled-down shutter was treat
 as clear glazing.
 
 
+## SVG export preview
+
+```bash
+npx vite --host 127.0.0.1 --port 5263
+```
+
+Open [the export example](http://127.0.0.1:5263/docker/line-art-preview.html).
+Select a floor, 2D/3D view or corner, then press **Export SVG** below the card.
+The example uses simulated entities and does not connect to Home Assistant.
+
+`node docker/verify-line-art.mjs` starts its own temporary local server, downloads
+through the real button in Chromium, reopens the files and checks selection,
+rotation, zoom and lighting. SVGs and screenshots go to `.claude/line-art-export/`
+(or the directory supplied as the first argument). Install the Playwright browser
+with `npx playwright install chromium` if needed.
+
 ## 3D development preview
 
 For a quick visual check without starting Home Assistant:
