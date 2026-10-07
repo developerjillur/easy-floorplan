@@ -246,6 +246,10 @@ The **Go to floor** selector also offers direct destinations (issue #327):
 | `main` | The configured `defaultFloor`, or the first floor when that id is unset or missing |
 | `{ floor: upstairs }` | The floor whose `id` is `upstairs` |
 
+![The Go to floor selector expanded to show relative, top, bottom, main and named floor destinations](img/floor-navigation-editor.jpg)
+
+The standalone editor's native fallback selector is expanded here to show every option.
+
 The editor lists each floor by name and id. A specific destination follows the id,
 so renaming or reordering floors keeps the link intact. An explicit object also
 allows a floor id such as `up` or `main` without confusing it with a navigation option.
@@ -254,6 +258,8 @@ For example, an elevator on the ground floor can skip directly to the loft:
 ```yaml
 goToFloor: { floor: loft }
 ```
+
+![Before and after tapping the staircase icon: the card jumps directly from Ground to Loft](img/floor-navigation-jump.jpg)
 
 Selecting **Main floor** uses the floor marked **Default** in the editor's floor
 menu; it does not use the last-viewed floor remembered by the card. Links to the

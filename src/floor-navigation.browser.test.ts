@@ -47,7 +47,7 @@ describe("direct floor navigation on the card", () => {
     ["top", "Cellar", "Loft", "mdi:stairs-up"],
     ["bottom", "Loft", "Cellar", "mdi:stairs-down"],
     ["main", "Loft", "Ground", "mdi:stairs-down"],
-  ] as const)("taps %s to skip straight to %s / %s", async (target, start, end, icon) => {
+  ] as const)("taps %s from %s and lands on %s", async (target, start, end, icon) => {
     const t = await mount(config(target));
     await t.switchTo(start);
     expect(t.link()!.getAttribute("aria-label")).toBe(`Go to ${end}`);

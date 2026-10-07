@@ -1832,7 +1832,9 @@ export function furnitureForm(
     : [{ value: f.type, label: `${f.type} (missing)` }, ...choices.map((s) => ({ value: s.id, label: s.name }))];
   // A prefixed selector value keeps floor ids such as "up" distinct from the
   // relative destinations. The config stores the explicit target as an object.
-  const namedFloor = f.goToFloor && typeof f.goToFloor === "object" ? f.goToFloor.floor : undefined;
+  const namedFloor = f.goToFloor && typeof f.goToFloor === "object" && typeof f.goToFloor.floor === "string"
+    ? f.goToFloor.floor
+    : undefined;
   const floorOptions = floors.map((floor) => opt(`floor:${floor.id}`, `Go to ${floor.name} (${floor.id})`));
   if (namedFloor !== undefined && !floors.some((floor) => floor.id === namedFloor)) {
     floorOptions.push(opt(`floor:${namedFloor}`, `Missing floor: ${namedFloor}`));
@@ -1913,7 +1915,9 @@ export function furnitureForm(
       h: f.h,
       angle: f.angle ?? 0,
       entity: f.entity ?? "",
-      goToFloor: namedFloor !== undefined ? `floor:${namedFloor}` : (f.goToFloor ?? ""),
+      goToFloor: namedFloor !== undefined
+        ? `floor:${namedFloor}`
+        : typeof f.goToFloor === "string" ? f.goToFloor : "",
       tap_action: f.tap_action,
       hold_action: f.hold_action,
       double_tap_action: f.double_tap_action,

@@ -79,6 +79,19 @@ describe("floor destination selector", () => {
     }
   });
 
+  it.each([{}, { floor: undefined }, { floor: null }, { floor: 3 }, [], null, 3, true].map((target) => [target]))(
+    "uses the empty selector option for a malformed destination: %j",
+    (target) => {
+      const furniture = piece(target as never);
+      const spec = furnitureForm(furniture, undefined, undefined, floors);
+      expect(spec.data.goToFloor).toBe("");
+      expect(options(spec).some((option) => option.label.startsWith("Missing floor:"))).toBe(false);
+      expect(furniture.goToFloor).toEqual(target); // Opening the form does not rewrite YAML.
+      expect(spec.toPatch({ angle: 90 })).toEqual({ angle: 90 });
+      expect(spec.toPatch({ goToFloor: "" })).toEqual({ goToFloor: undefined });
+    },
+  );
+
   it("retains a missing floor and unrelated actions when editing", () => {
     const spec = form({ floor: "removed" });
     expect(options(spec)).toContainEqual({ value: "floor:removed", label: "Missing floor: removed" });
