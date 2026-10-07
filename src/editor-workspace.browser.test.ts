@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import "./editor";
 import type { FloorplanCardEditor } from "./editor";
 import type { FloorplanCardConfig } from "./types";
@@ -112,7 +113,7 @@ describe("responsive editor workspace", () => {
     const t = await mount(360);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
-    t.el('[title="Reset zoom to 100%"]')?.click();
+    t.el('[title="Use full canvas width (100%)"]')?.click();
     await settle(t.editor);
     const canvas = t.el(".canvas-wrap");
     t.el(".inspector-jump").click();
@@ -124,7 +125,7 @@ describe("responsive editor workspace", () => {
     await settle(t.editor);
     expect(t.root.activeElement).toBe(canvas);
     expect(t.el(".canvas-column").checkVisibility()).toBe(true);
-    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100%");
+    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100% width");
     t.el(".inspector-jump").click();
     await settle(t.editor);
     expect(t.root.querySelector<HTMLInputElement>("#field-w")?.value).toBe("180");
@@ -148,7 +149,7 @@ describe("responsive editor workspace", () => {
     t.editor.setConfig(c);
     (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
     await settle(t.editor);
-    t.el('[title="Reset zoom to 100%"]').click();
+    t.el('[title="Use full canvas width (100%)"]').click();
     await settle(t.editor);
     t.el(".inspector-jump").click();
     await settle(t.editor);
@@ -156,7 +157,7 @@ describe("responsive editor workspace", () => {
     const selected = t.rect(".stage .selected");
     expect(selected.top).toBeGreaterThanOrEqual(preview.top);
     expect(selected.bottom).toBeLessThanOrEqual(preview.bottom);
-    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100%");
+    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100% width");
     // Zoom controls have their own space, so they cannot cover the edited object.
     expect(t.rect(".zoom-overlay").top).toBeGreaterThanOrEqual(preview.bottom);
     const width = t.el("#field-w") as HTMLInputElement;
@@ -182,11 +183,11 @@ describe("responsive editor workspace", () => {
 
   it("preserves manual zoom on resize and refits when requested", async () => {
     const t = await mount(1300);
-    t.root.querySelector<HTMLButtonElement>('[title="Reset zoom to 100%"]')!.click();
+    t.root.querySelector<HTMLButtonElement>('[title="Use full canvas width (100%)"]')!.click();
     await settle(t.editor);
     t.editor.style.width = "1100px";
     await settle(t.editor);
-    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100%");
+    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100% width");
     t.root.querySelector<HTMLButtonElement>('[aria-label="Fit to view"]')!.click();
     await settle(t.editor);
     expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
@@ -196,6 +197,150 @@ describe("responsive editor workspace", () => {
     document.body.append(t.editor);
     await settle(t.editor);
     expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
+  });
+
+  it.each(["resize", "inspector"])("preserves a scroll-panned fitted plan across %s changes", async (change) => {
+    const t = await mount(360);
+    // At the minimum fitted scale an unusually tall plan still overflows.
+    // Do not use a zoom control: that already opts out of automatic fitting.
+    const c = config();
+    c.height = 1000000;
+    c.floors![0].furniture[0].y = 100000;
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    const wrap = t.el(".canvas-wrap");
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("true");
+    wrap.scrollTop = 200;
+    await settle(t.editor);
+    expect(wrap.scrollTop).toBe(200);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("false");
+    const zoom = t.el(".zoom-val-btn").textContent;
+    if (change === "inspector") {
+      t.el(".inspector-jump").click();
+      await settle(t.editor);
+    }
+    const pan = wrap.scrollTop;
+    expect(pan).toBeGreaterThan(0);
+    if (change === "resize") t.editor.style.width = "420px";
+    else t.el(".canvas-jump").click();
+    await settle(t.editor);
+    expect(wrap.scrollTop).toBe(pan);
+    expect(t.el(".zoom-val-btn").textContent).toBe(zoom);
+    t.el('[aria-label="Fit to view"]').click();
+    await settle(t.editor);
+    expect(wrap.scrollTop).toBe(0);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("fits changed plan dimensions in the same render as each edit", async () => {
+    const t = await mount(1300);
+    const render = vi.spyOn(t.editor as unknown as { render(): unknown }, "render");
+    try {
+      for (const height of [1600, 2400, 2401]) {
+        render.mockClear();
+        t.editor.setConfig({ ...config(), height });
+        expect(await t.editor.updateComplete).toBe(true);
+        await settle(t.editor);
+        expect(render).toHaveBeenCalledTimes(1);
+        expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
+      }
+    } finally {
+      render.mockRestore();
+    }
+  });
+
+  it("keeps automatic fitting after the phone preview pans to the selection", async () => {
+    const t = await mount(360);
+    const c = config();
+    c.height = 720;
+    c.floors![0].furniture[0].y = 550;
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    expect(t.el(".canvas-wrap").scrollTop).toBeGreaterThan(0);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("true");
+    t.el(".preview-toggle").click();
+    await settle(t.editor);
+    t.el(".preview-toggle").click();
+    await settle(t.editor);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("true");
+    t.el(".canvas-jump").click();
+    await settle(t.editor);
+    t.editor.style.width = "560px";
+    await settle(t.editor);
+    expect(t.el(".canvas-wrap").scrollTop).toBe(0);
+    expect(t.rect(".stage").height).toBeLessThanOrEqual(t.el(".canvas-wrap").clientHeight + 1);
+  });
+
+  it("explains snap distances visibly on a phone and labels the zoom reference", async () => {
+    const t = await mount(286);
+    t.editor.setConfig({ ...config(), grid: 40 });
+    await settle(t.editor);
+    expect(t.el("#snap-hint").textContent).toBe("Snapping to the 40-unit grid.");
+    expect(t.el("#snap-hint").checkVisibility()).toBe(true);
+    t.editor.setConfig({ ...config(), grid: 40, snap: 10 });
+    await settle(t.editor);
+    expect(t.el("#snap-hint").textContent).toBe("Snap = 25% of grid (10 units).");
+    expect(t.el('[aria-label="Custom snap percentage"]').getAttribute("aria-describedby")).toBe("snap-hint");
+    expect(t.rect("#snap-hint").left).toBeGreaterThanOrEqual(t.rect(".editor").left);
+    expect(t.rect("#snap-hint").right).toBeLessThanOrEqual(t.rect(".editor").right);
+    expect(t.rect(".zoom-overlay").left).toBeGreaterThanOrEqual(t.rect(".canvas-column").left);
+    expect(t.el(".zoom-val-btn").textContent).toContain("% width");
+    t.el(".zoom-val-btn").click();
+    await settle(t.editor);
+    expect(t.el(".zoom-val-btn").textContent?.trim()).toBe("100% width");
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("false");
+    const snapping = t.el('[aria-label="Snapping"]') as HTMLSelectElement;
+    snapping.value = "off";
+    snapping.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(t.editor);
+    expect(t.el("#snap-hint").textContent).toBe("Snapping is off.");
+  });
+
+  it("treats scrolling the automatic phone preview back to the origin as a manual pan", async () => {
+    const t = await mount(360);
+    const c = config();
+    c.height = 720;
+    c.floors![0].furniture[0].y = 550;
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "furniture", id: "sofa" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    const wrap = t.el(".canvas-wrap");
+    expect(wrap.scrollTop).toBeGreaterThan(0);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("true");
+    wrap.scrollTop = 0;
+    await settle(t.editor);
+    expect(t.el('[aria-label="Fit to view"]').getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("moves keyboard focus to Sensors and resets inspector scroll from the unbound-opening shortcut", async () => {
+    const t = await mount(360);
+    const c = config();
+    c.floors![0].openings = [{ id: "door", type: "door", x: 100, y: 100, length: 80, angle: 0 }];
+    t.editor.setConfig(c);
+    (t.editor as unknown as { _selection: unknown[] })._selection = [{ kind: "opening", id: "door" }];
+    await settle(t.editor);
+    t.el(".inspector-jump").click();
+    await settle(t.editor);
+    t.el("#object-category-actions").click();
+    await settle(t.editor);
+    const side = t.el(".side");
+    side.style.height = "160px";
+    side.scrollTop = 40;
+    const shortcut = t.el(".unbound-actions button");
+    shortcut.focus({ preventScroll: true });
+    expect(side.scrollTop).toBeGreaterThan(0);
+    await userEvent.keyboard("{Enter}");
+    await settle(t.editor);
+    expect(t.el("#object-category-sensors").getAttribute("aria-selected")).toBe("true");
+    expect(t.root.activeElement).toBe(t.el("#object-category-sensors"));
+    expect(side.scrollTop).toBe(0);
+    expect(t.root.querySelector("#field-entity")).not.toBeNull();
   });
 
   it.each([286, 360, 560, 640, 842, 900, 1300])("keeps the insert menu inside a %ipx editor", async (width) => {
@@ -530,7 +675,7 @@ describe("responsive editor workspace", () => {
       pointerType: "touch", pointerId: id, clientX: wrap.left + x, clientY: wrap.top + 150,
       bubbles: true, composed: true, cancelable: true, button: 0, buttons: type === "pointercancel" ? 0 : 1,
     }));
-    const zoom = () => Number(t.el(".zoom-val-btn").textContent!.replace("%", "").trim());
+    const zoom = () => parseFloat(t.el(".zoom-val-btn").textContent!);
     const initial = zoom();
     touch("pointerdown", 21, 70);
     touch("pointerdown", 22, 150);

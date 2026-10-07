@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import "./editor";
 import type { FloorplanCardEditor } from "./editor";
 import type { FloorplanCardConfig, Floor, FloorItem, Opening } from "./types";
@@ -9,6 +9,7 @@ import {
   itemEffectsForm, itemBehaviourForm, itemGroup7aForm, projectForm, projectDisplayForm,
   projectSkinForm, projectDeadSpaceForm, projectSunForm, projectReliefForm,
   projectReplayForm, projectPressForm, floorImageForm,
+  wallForm, textForm,
 } from "./editor-forms";
 
 const config = (): FloorplanCardConfig => ({
@@ -31,18 +32,25 @@ async function mount(c: FloorplanCardConfig, kind?: SelKind) {
 /** Compare the rendered destinations with the existing schemas, including conditional fields. */
 async function expectEveryFieldOnce(editor: FloorplanCardEditor, specs: (FormSpec | undefined)[], project = false) {
   const root = editor.shadowRoot!;
+  const renderGroup = vi.spyOn(editor as unknown as { _renderGroup(title: string, ...content: unknown[]): unknown }, "_renderGroup");
   const picker = root.querySelector<HTMLElement>(`[role="tablist"][aria-label="${project ? "Project" : "Object"} settings"]`)!;
-  expect(picker).not.toBeNull();
   const found = new Set<string>();
-  for (const option of picker.querySelectorAll<HTMLButtonElement>("button")) {
-    option.click();
+  const groups = new Set<string>();
+  // Walls and text have a single properties page, without category tabs.
+  for (const option of picker ? [...picker.querySelectorAll<HTMLButtonElement>("button")] : [null]) {
+    option?.click();
+    editor.requestUpdate();
     await editor.updateComplete;
     expect(root.querySelector("button.cfg-group-title")).toBeNull();
     for (const field of root.querySelectorAll<HTMLElement>('[id^="field-"]')) {
-      expect(found.has(field.id), `${field.id} repeated in ${option.textContent}`).toBe(false);
+      expect(found.has(field.id), `${field.id} repeated in ${option?.textContent ?? "Properties"}`).toBe(false);
       found.add(field.id);
     }
-    if (option.dataset.page === "actions") {
+    for (const group of root.querySelectorAll<HTMLElement>(".cfg-group")) {
+      expect(groups.has(group.dataset.group!), `Repeated group: ${group.dataset.group}`).toBe(false);
+      groups.add(group.dataset.group!);
+    }
+    if (option?.dataset.page === "actions") {
       const hasActions = specs.some((spec) => spec?.fields.some((field) => "ui_action" in field.selector));
       expect(root.querySelectorAll(hasActions ? ".action-editor-note" : ".unbound-actions")).toHaveLength(1);
     }
@@ -50,11 +58,29 @@ async function expectEveryFieldOnce(editor: FloorplanCardEditor, specs: (FormSpe
   const expected = specs.flatMap((spec) => spec?.fields ?? [])
     .filter((field) => !("ui_action" in field.selector)).map((field) => `field-${field.name}`);
   expect(found).toEqual(new Set(expected));
+  // Include groups containing custom controls rather than schema fields.
+  // A typo in a heading or destination table must not silently hide a group.
+  expect(groups).toEqual(new Set(renderGroup.mock.calls.map(([title]) => title)));
+  renderGroup.mockRestore();
 }
 
-afterEach(() => { document.body.innerHTML = ""; });
+afterEach(() => { document.body.innerHTML = ""; vi.restoreAllMocks(); });
 
 describe("direct inspector categories", () => {
+  it.each(["wall", "railing"] as const)("keeps every %s property reachable once", async (kind) => {
+    const c = config();
+    const wall = { id: "target", kind, x1: 100, y1: 100, x2: 400, y2: 100, thickness: 10 };
+    c.floors![0].walls = [wall];
+    await expectEveryFieldOnce(await mount(c, "wall"), [wallForm(wall)]);
+  });
+
+  it.each([undefined, "sensor.temperature"])("keeps every text property reachable with entity %s", async (entity) => {
+    const c = config();
+    const text = { id: "target", text: "Temperature", x: 100, y: 100, entity, attribute: "value" };
+    c.floors![0].texts = [text];
+    await expectEveryFieldOnce(await mount(c, "text"), [textForm(text)]);
+  });
+
   it.each([
     { type: "door", motion: "swing" },
     { type: "window", motion: "swing", entity: "binary_sensor.window", shutterEntity: "cover.shutter", showIcon: true, showShutterIcon: true },

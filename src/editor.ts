@@ -507,7 +507,9 @@ export class FloorplanCardEditor extends LitElement {
   @query("svg") private _svg?: SVGSVGElement;
   @query(".canvas-wrap") private _canvasWrap?: HTMLElement;
   private _canvasResize?: ResizeObserver;
-  private _fitToViewport = true;
+  @state() private _fitToViewport = true;
+  /** Last observed/editor-driven pan; viewport changes can clamp it without user input. */
+  private _canvasScroll?: { left: number; top: number; width: number; height: number };
   private _numberDraft?: { form: HTMLElement; name: string; value: unknown };
 
   private _drag: Drag | null = null;
@@ -902,6 +904,13 @@ export class FloorplanCardEditor extends LitElement {
   };
 
   protected willUpdate(changed: PropertyValues): void {
+    const previousConfig = changed.get("_config") as FloorplanCardConfig | undefined;
+    if (previousConfig && this._fitToViewport &&
+        (previousConfig.width !== this._config.width || previousConfig.height !== this._config.height)) {
+      // The wrap is independent of the plan dimensions. Measure it now so
+      // the new dimensions and fitted scale reach the canvas in one render.
+      this._fitView();
+    }
     // A fresh canvas selection should immediately show what can be edited.
     if (changed.has("_selection")) {
       const previous = (changed.get("_selection") as Sel[] | undefined) ?? [];
@@ -924,12 +933,7 @@ export class FloorplanCardEditor extends LitElement {
    * hides the popover on its own. Browsers without the API keep the fixed
    * fallback, which is already correct on the mobile dialog (transform: none).
    */
-  protected updated(changed: PropertyValues): void {
-    const previous = changed.get("_config") as FloorplanCardConfig | undefined;
-    if (previous && this._fitToViewport &&
-        (previous.width !== this._config.width || previous.height !== this._config.height)) {
-      this._fitView();
-    }
+  protected updated(): void {
     // Re-asserted on every render while fullscreen (not just the transition):
     // idempotent via :popover-open, and it self-heals if the browser
     // force-hid the popover, e.g. across a disconnect/reconnect.
@@ -2904,47 +2908,48 @@ export class FloorplanCardEditor extends LitElement {
 
   /** Flat headings within the selected category; no nested disclosure state. */
   private _renderGroup(title: string, ...content: unknown[]): TemplateResult {
-    const key = title === "Behaviour" ? "Behavior" : title;
     const pages = this._projectOpen ? PROJECT_PAGES : SELECTION_PAGES[this._primary()?.kind ?? "wall"];
     const active = this._projectOpen ? this._projectPage : this._selectionPage;
-    if (!pages.find((page) => page.id === active)?.groups.includes(key)) return html`${nothing}`;
+    if (!pages.find((page) => page.id === active)?.groups.includes(title)) return html`${nothing}`;
     const label = ({
-      "What it reads": "Sensor readings", Behavior: "Tap, hold & double-tap", Behaviour: "Tap, hold & double-tap",
+      "What it reads": "Sensor readings", Behavior: "Tap, hold & double-tap",
       Look: "Plan style", Project: "Canvas", Display: "View & scale", Color: "State colors",
       "Floor image": `Background · ${this._floor().name}`,
     } as Record<string, string>)[title] ?? title;
-    return html`<section class="cfg-group" data-group=${key}>
+    return html`<section class="cfg-group" data-group=${title}>
       <h3 class="cfg-group-title">${label}</h3>${content}
     </section>`;
+  }
+
+  /** Tabs and in-panel shortcuts share draft, scroll and keyboard-focus handling. */
+  private async _choosePage(id: string, project = false): Promise<void> {
+    this._numberDraft = undefined;
+    if (project) this._projectPage = id;
+    else this._selectionPage = id;
+    this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>(`#${project ? "project" : "object"}-category-${id}`)?.focus({ preventScroll: true });
   }
 
   private _renderPagePicker(pages: readonly InspectorPage[], project: boolean): TemplateResult | typeof nothing {
     if (pages.length < 2) return nothing;
     const active = project ? this._projectPage : this._selectionPage;
     const prefix = project ? "project" : "object";
-    const choose = (id: string) => {
-      this._numberDraft = undefined;
-      if (project) this._projectPage = id;
-      else this._selectionPage = id;
-      this.renderRoot.querySelector<HTMLElement>(".side")?.scrollTo({ top: 0 });
-    };
     return html`<div class="settings-category ${pages.length === 4 ? "two-columns" : ""}"
       role="tablist" aria-label=${project ? "Project settings" : "Object settings"}
-      @keydown=${async (event: KeyboardEvent) => {
+      @keydown=${(event: KeyboardEvent) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
         event.stopPropagation();
         const index = pages.findIndex((page) => page.id === active);
         const next = event.key === "Home" ? 0 : event.key === "End" ? pages.length - 1
           : (index + (event.key === "ArrowRight" ? 1 : -1) + pages.length) % pages.length;
-        choose(pages[next].id);
-        await this.updateComplete;
-        this.renderRoot.querySelector<HTMLElement>(`#${prefix}-category-${pages[next].id}`)?.focus({ preventScroll: true });
+        void this._choosePage(pages[next].id, project);
       }}>
       ${pages.map((page) => html`<button role="tab" id=${`${prefix}-category-${page.id}`}
         data-page=${page.id} aria-selected=${active === page.id} tabindex=${active === page.id ? 0 : -1}
         aria-controls=${`${prefix}-settings-page`} title=${page.hint ?? page.label}
-        @click=${() => choose(page.id)}>${page.label}</button>`)}
+        @click=${() => this._choosePage(page.id, project)}>${page.label}</button>`)}
     </div>`;
   }
 
@@ -3418,6 +3423,32 @@ export class FloorplanCardEditor extends LitElement {
     this._setZoom(this._zoom - Math.sign(ev.deltaY) * 0.1);
   }
 
+  private _onCanvasScroll(): void {
+    const wrap = this._canvasWrap;
+    if (!wrap) return;
+    const previous = this._canvasScroll;
+    this._recordCanvasScroll(wrap);
+    if (!previous || (previous.left === wrap.scrollLeft && previous.top === wrap.scrollTop)) return;
+    // Hiding/enlarging the preview can clamp the offset. A pan within an
+    // unchanged viewport is manual, including scrolling back to the origin.
+    if (previous.width === wrap.clientWidth && previous.height === wrap.clientHeight) {
+      this._fitToViewport = false;
+    }
+  }
+
+  private _recordCanvasScroll(wrap: HTMLElement): void {
+    this._canvasScroll = { left: wrap.scrollLeft, top: wrap.scrollTop,
+      width: wrap.clientWidth, height: wrap.clientHeight };
+  }
+
+  private _scrollCanvas(left: number, top: number): void {
+    const wrap = this._canvasWrap;
+    if (!wrap) return;
+    wrap.scrollTo({ left, top, behavior: "instant" });
+    // Read back the clamped position; scroll events are delivered later.
+    this._recordCanvasScroll(wrap);
+  }
+
   /** Fit both dimensions, including tall plans in a docked or fullscreen canvas. */
   private _fitView(): void {
     this._fitToViewport = true;
@@ -3428,7 +3459,7 @@ export class FloorplanCardEditor extends LitElement {
     const width = wrap.getBoundingClientRect().width - 2;
     const fit = (wrap.clientHeight * this._config.width) / (width * this._config.height);
     this._zoom = Math.max(0.01, Math.min(1, Math.floor(fit * 100) / 100));
-    wrap.scrollTo({ top: 0, left: 0 });
+    this._scrollCanvas(0, 0);
   }
 
   /** One-line description of the selected element for the Element header. */
@@ -3657,7 +3688,7 @@ export class FloorplanCardEditor extends LitElement {
     const customPercent = snapToGridPercent(this._config.snap as number, this.grid);
     return html`
       <label class="snap-control">Snap
-        <select aria-label="Snapping" .value=${mode}
+        <select aria-label="Snapping" aria-describedby="snap-hint" .value=${mode}
           @change=${(event: Event) => this._setSnapMode((event.target as HTMLSelectElement).value as "grid" | "off" | "custom")}>
           <option value="grid">Grid</option>
           <option value="off">Off</option>
@@ -3672,6 +3703,8 @@ export class FloorplanCardEditor extends LitElement {
               step="5"
               .value=${String(customPercent)}
               title="Custom snap step, as a percentage of the grid"
+              aria-label="Custom snap percentage"
+              aria-describedby="snap-hint"
               @change=${(e: Event) => {
                 const pct = Math.max(
                   1,
@@ -3681,6 +3714,10 @@ export class FloorplanCardEditor extends LitElement {
               }}
             /><span class="ctx-field-label">%</span>`
         : nothing}
+      <span class="ctx-hint snap-hint" id="snap-hint">${mode === "grid"
+        ? `Snapping to the ${this.grid}-unit grid.`
+        : mode === "off" ? "Snapping is off."
+        : `Snap = ${customPercent}% of grid (${this._resolvedSnap} units).`}</span>
     `;
   }
 
@@ -4032,6 +4069,7 @@ export class FloorplanCardEditor extends LitElement {
             ? nothing
             : `aspect-ratio:${cssNumber(c.width, DEFAULT_WIDTH)} / ${cssNumber(c.height, DEFAULT_HEIGHT)};`}
           @wheel=${this._onCanvasWheel}
+          @scroll=${this._onCanvasScroll}
         >
           <!-- The stage doubles as the card's .plan box for overlay sizing: same
                container query, same --fp-u, so a badge measured in canvas units
@@ -4217,14 +4255,15 @@ export class FloorplanCardEditor extends LitElement {
           <button aria-label="Zoom out" title="Zoom out" @click=${() => this._setZoom(this._zoom - 0.25)}>
             <ha-icon icon="mdi:minus"></ha-icon>
           </button>
-          <button class="zoom-val-btn" title="Reset zoom to 100%" @click=${() => this._setZoom(1)}>
-            ${Math.round(this._zoom * 100)}%
+          <button class="zoom-val-btn" title="Use full canvas width (100%)" @click=${() => this._setZoom(1)}>
+            ${Math.round(this._zoom * 100)}% width
           </button>
           <button aria-label="Zoom in" title="Zoom in" @click=${() => this._setZoom(this._zoom + 0.25)}>
             <ha-icon icon="mdi:plus"></ha-icon>
           </button>
-          <button aria-label="Fit to view" title="Fit to view" @click=${this._fitView}>
-            <ha-icon icon="mdi:fit-to-screen-outline"></ha-icon>
+          <button aria-label="Fit to view" title="Fit the whole plan; refit automatically on resize"
+            aria-pressed=${this._fitToViewport} class=${this._fitToViewport ? "active" : ""} @click=${this._fitView}>
+            <ha-icon icon="mdi:fit-to-screen-outline"></ha-icon> Fit
           </button>
         </div>
         </div>
@@ -4656,8 +4695,8 @@ export class FloorplanCardEditor extends LitElement {
     const right = view.left + wrap.clientWidth;
     const bottom = view.top + wrap.clientHeight;
     if (target.left < view.left || target.right > right || target.top < view.top || target.bottom > bottom) {
-      wrap.scrollBy({ left: (target.left + target.right - view.left - right) / 2,
-        top: (target.top + target.bottom - view.top - bottom) / 2 });
+      this._scrollCanvas(wrap.scrollLeft + (target.left + target.right - view.left - right) / 2,
+        wrap.scrollTop + (target.top + target.bottom - view.top - bottom) / 2);
     }
   }
 
@@ -6268,7 +6307,7 @@ export class FloorplanCardEditor extends LitElement {
         ${this._selectionPage === "actions" && !spec.fields.some((field) => "ui_action" in field.selector)
           ? html`<div class="unbound-actions">
               <p class="hint">Connect a sensor or cover to give this opening tap, hold and double-tap actions.</p>
-              <button @click=${() => { this._selectionPage = "sensors"; }}>Choose a sensor</button>
+              <button @click=${() => this._choosePage("sensors")}>Choose a sensor</button>
             </div>`
           : nothing}
         ${FloorplanCardEditor.OPENING_GROUPS.filter(([title]) => title !== "Shape").map(([title, names]) =>
@@ -6449,7 +6488,7 @@ export class FloorplanCardEditor extends LitElement {
                 : nothing
             )
           : nothing}
-        ${this._renderGroup("Behaviour", this._renderForm(itemBehaviourForm(it), apply))}
+        ${this._renderGroup("Behavior", this._renderForm(itemBehaviourForm(it), apply))}
         ${this._renderGroup("Visibility", this._renderForm(itemGroup7aForm(it), apply))}
       `;
     }

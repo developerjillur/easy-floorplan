@@ -116,12 +116,13 @@ export const editorWorkspaceStyles = css`
   .stage { box-shadow: 0 1px 6px #0000000a; }
   .grid { stroke-opacity: .11; }
   .zoom-overlay { right: 22px; bottom: 22px; gap: 0; padding: 3px; background: var(--editor-paper); border: 1px solid var(--editor-line); border-radius: 8px; box-shadow: 0 3px 10px #0000000d; }
-  .zoom-overlay button { border: 0; min-height: 30px; background: transparent; }
+  .zoom-overlay button { border: 0; min-height: 30px; gap: 4px; background: transparent; }
   .zoom-overlay button:hover { background: var(--editor-ground); }
   .zoom-overlay ha-icon { --mdc-icon-size: 17px; }
   .context-bar { margin: 0; padding: 7px 12px; gap: 8px; background: var(--editor-paper); border: 0; border-top: 1px solid var(--editor-line); border-radius: 0; }
   .context-bar .ctx-label { border: 0; padding: 0; text-transform: none; letter-spacing: 0; font-size: 12px; }
   .context-bar .ctx-hint { font-size: 12px; line-height: 1.5; }
+  .context-bar > .snap-hint { flex: 1 1 100%; text-align: right; }
   .context-bar .ctx-divider { margin-left: auto; }
   .context-bar button { font-size: 12px; min-height: 32px; padding: 4px 8px; }
   .snap-control { display: flex; align-items: center; gap: 6px; color: var(--editor-muted); font-size: 12px; white-space: nowrap; }
