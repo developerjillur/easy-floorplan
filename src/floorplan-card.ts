@@ -429,6 +429,9 @@ export class FloorplanCard extends LitElement {
    * attribute on the element at all.
    */
   protected willUpdate(changed: PropertyValues): void {
+    // Viewer appearance and Reset view can pause or restore moonlight without
+    // changing the saved config. Keep its redraw clock on the same display.
+    if (changed.has("_appearanceOverride")) this._syncMoonClock();
     if (!changed.has("_config")) return;
     const skin = skinAttribute(this._config?.skin);
     if (skin) this.setAttribute("data-skin", skin);
@@ -632,7 +635,7 @@ export class FloorplanCard extends LitElement {
   private _moonClock?: ReturnType<typeof setInterval>;
 
   private _syncMoonClock(): void {
-    const wanted = this.isConnected && !!this._config && moonlightOn(this._config);
+    const wanted = this.isConnected && !!this._config && moonlightOn(this._displayConfig());
     if (wanted && this._moonClock === undefined) {
       this._moonClock = setInterval(() => this.requestUpdate(), MOON_TICK_MS);
     } else if (!wanted && this._moonClock !== undefined) {

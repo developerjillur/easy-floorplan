@@ -13,17 +13,16 @@ import {
   projectedCanvasSize, renderIsoSolids, wallSolids, type DisplayFrame, type IsoSolid,
 } from "./projection";
 import { openingSolids } from "./projection-openings";
-import { solidEdgeRenderer } from "./line-art";
+import { LINE_INK, solidEdgeRenderer } from "./line-art";
 import { symbolCatalog } from "./symbols";
 import { DEFAULT_HEIGHT, DEFAULT_WIDTH, type Floor, type FloorplanCardConfig, type Opening } from "./types";
 
-const INK = "#222222";
 const PAPER = "#ffffff";
 
 // Export a stable drawing convention: swing doors open, windows closed. Entity
 // values, replay time, and an opening midway through an animation are irrelevant.
 const openingStyle = (o: Opening): OpeningStyle => ({
-  color: INK, accent: INK, open: openingDefaultOpen(o),
+  color: LINE_INK, accent: LINE_INK, open: openingDefaultOpen(o),
 });
 
 export interface LineArtExport {
@@ -47,7 +46,7 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
   const rotate = planRotationTransform(width, height, rot);
   const map = (x: number, y: number) => rotatePlanPoint(x, y, width, height, rot);
   const catalog = symbolCatalog(c.symbols);
-  const drawFurniture = (f: Floor["furniture"][number]) => renderFurniture(f, INK, catalog);
+  const drawFurniture = (f: Floor["furniture"][number]) => renderFurniture(f, LINE_INK, catalog);
   const solids: IsoSolid[] = [];
   if (standing) {
     solids.push(...wallSolids(walls.filter((w) => !w.divider).map((w) => {
@@ -61,7 +60,7 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
     for (const f of floor.furniture) solids.push(furnitureSolid(f, map, h, PAPER,
       svg`<g transform=${rotate || nothing}><g transform="translate(${lift.x} ${lift.y})">${drawFurniture(f)}</g></g>`));
   }
-  const solidEdges = solidEdgeRenderer(solids, INK);
+  const solidEdges = solidEdgeRenderer(solids, LINE_INK);
   const view = frame.projection === "iso" ? "3d" : "2d";
   const title = `${c.title ? `${c.title} — ` : ""}${floor.name} (${view.toUpperCase()})`;
   const margin = 20;
@@ -75,10 +74,10 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
       <g transform=${planProjectionTransform(frame) || nothing}>
         <g transform=${rotate || nothing}>
           ${floor.areas.map((a) => svg`<polygon points=${a.points.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill=${PAPER} stroke=${INK} stroke-width="0.6" />`)}
+            fill=${PAPER} stroke=${LINE_INK} stroke-width="0.6" />`)}
           ${renderWallMask(floor.openings, width, height, "wall-gaps")}
           <g mask="url(#wall-gaps)">${walls.filter((w) => !standing || w.divider).map((w) => svg`
-            <line x1=${w.x1} y1=${w.y1} x2=${w.x2} y2=${w.y2} stroke=${INK}
+            <line x1=${w.x1} y1=${w.y1} x2=${w.x2} y2=${w.y2} stroke=${LINE_INK}
               stroke-width=${w.divider ? 1 : wallThickness(w.thickness) * (isRailing(w) ? RAILING_WEIGHT : 1)}
               stroke-dasharray=${w.divider ? "5 4" : nothing} />`)}</g>
           ${standing ? nothing : floor.openings.map((o) => renderOpening(o, openingStyle(o)))}
@@ -87,7 +86,7 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
         ${standing ? renderIsoSolids(solids.filter((s) => s.kind !== "opening-hit"), (s, drawing) =>
           svg`<g>${drawing}${solidEdges(s)}</g>`) : nothing}
       </g>
-      <g fill=${INK} font-family="sans-serif" text-anchor="middle" dominant-baseline="central">
+      <g fill=${LINE_INK} font-family="sans-serif" text-anchor="middle" dominant-baseline="central">
         ${floor.areas.filter((a) => a.name && a.showName !== false).map((a) => {
           const at = areaLabelPoint(a.points), p = map(at.x, at.y);
           const label = projectPlanPoint(p.x, p.y, frame);
@@ -104,7 +103,7 @@ export function createLineArtSvg(c: FloorplanCardConfig, floor: Floor, rot: Plan
   drawing.querySelectorAll(".fp-iso-face, .fp-iso-panel, .fp-iso-glass").forEach((e) => {
     e.setAttribute("fill", PAPER);
     if (!e.classList.contains("fp-iso-face")) {
-      e.setAttribute("stroke", INK);
+      e.setAttribute("stroke", LINE_INK);
       e.setAttribute("stroke-width", "1");
     }
   });

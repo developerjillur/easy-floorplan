@@ -599,8 +599,8 @@ view: 3d
 wallHeight: 60
 ```
 
-The file contains black-on-white walls, openings, furniture (including custom
-symbols), dividers and room names. It needs no Home Assistant connection, theme,
+The file uses the live Line art's dark ink on white for walls, openings, furniture
+(including custom symbols), dividers and room names. It needs no Home Assistant connection, theme,
 external fonts or linked images. Openings use their static drawing convention:
 swing doors open and windows closed, respecting the configured inversion.
 Background images, free text, device badges, entity readings, lighting

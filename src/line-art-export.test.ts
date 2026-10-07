@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { createLineArtSvg } from "./line-art-export";
+import { LINE_INK } from "./line-art";
 import { emptyConfig, getFloors } from "./types";
 
 function fixture() {
@@ -20,6 +21,22 @@ function fixture() {
 const parse = (svg: string) => new DOMParser().parseFromString(svg, "image/svg+xml");
 
 describe("standalone line art", () => {
+  it.each(["2d", "3d"] as const)("uses the live line-art ink in the %s download", (view) => {
+    const { config, floor } = fixture();
+    config.view = view;
+    const output = createLineArtSvg(config, floor, 0).svg;
+    const doc = parse(output);
+    expect(doc.querySelector("polygon[stroke]")?.getAttribute("stroke")).toBe(LINE_INK);
+    expect(doc.querySelector("text")?.parentElement?.getAttribute("fill")).toBe(LINE_INK);
+    expect(output).not.toContain("#222222");
+    if (view === "3d") {
+      expect(doc.querySelector(".solid-edges")?.getAttribute("stroke")).toBe(LINE_INK);
+      expect(doc.querySelector(".fp-iso-panel")?.getAttribute("stroke")).toBe(LINE_INK);
+    } else {
+      expect(doc.querySelector(".fp-door-leaf rect")?.getAttribute("fill")).toBe(LINE_INK);
+    }
+  });
+
   it("creates valid, escaped, self-contained XML without live entity hooks or runtime markup", () => {
     const { config, floor } = fixture();
     const before = JSON.stringify({ config, floor });

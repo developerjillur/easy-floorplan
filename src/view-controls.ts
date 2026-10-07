@@ -121,7 +121,6 @@ export const viewControlStyles = css`
   .view-rotation { display: flex; align-items: center; }
   .view-rotation output { width: 38px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
   .view-actions button { padding: 8px; }
-  .view-actions .view-download { border-left-color: var(--divider-color, #e2e7ea); border-radius: 0 7px 7px 0; }
   .view-controls svg {
     position: static;
     inset: auto;
