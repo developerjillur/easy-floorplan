@@ -4,6 +4,7 @@ import { PROJECT_PAGES, SELECTION_PAGES, type InspectorPage } from "./editor-nav
 import { editorWorkspaceStyles } from "./editor-workspace-styles";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
+import { validateYCoordinates } from "./config-coordinates";
 import type {
   HomeAssistant,
   FloorplanCardConfig,
@@ -681,6 +682,7 @@ export class FloorplanCardEditor extends LitElement {
   }
 
   public setConfig(config: FloorplanCardConfig): void {
+    validateYCoordinates(config);
     const base = { ...emptyConfig(config.type || "custom:easy-floorplan-card"), ...config };
     // Normalize to the floors model (migrating legacy single-floor configs) and
     // clear the legacy flat arrays so `floors` is the single source of truth.
