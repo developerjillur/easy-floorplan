@@ -5456,7 +5456,7 @@ export class FloorplanCardEditor extends LitElement {
     // "Only when active" devices are invisible on the card while idle (issue
     // #55). The editor must still show them — dimmed — or they could never be
     // found and edited again.
-    const hiddenOnCard = itemHiddenWhenInactive(it, st?.state);
+    const hiddenOnCard = itemHiddenWhenInactive(it, st?.state, this.hass);
     return html`
       <div
         class="edit-item ${selected ? "selected" : ""} ${hiddenOnCard ? "card-hidden" : ""}"
@@ -5804,6 +5804,9 @@ export class FloorplanCardEditor extends LitElement {
           this._renderForm(
             formSlice(display, [
               "view",
+              "appearance",
+              "showViewControls",
+              "showExport",
               "wallHeight",
               "wallOpacity",
               "rotation",
