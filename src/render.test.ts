@@ -2773,10 +2773,9 @@ describe("badgeValue (#106)", () => {
       ).toBe("30%");
     });
 
-    it("shows the icon when the light is off: no brightness attribute at all", () => {
-      // HA drops `brightness` from an off light's attributes, so the numeric
-      // gate alone gives the issue's "plain icon when off" half for free.
-      const h = hass({ "light.office": { state: "off", attributes: {} } });
+    it.each([{}, { brightness: null }])("shows the icon when an off light has no numeric brightness (%j)", (attributes) => {
+      // Off lights may omit brightness or report null; neither is a number.
+      const h = hass({ "light.office": { state: "off", attributes } });
       expect(badgeValue(h, issueItem)).toBeUndefined();
     });
 
@@ -2796,6 +2795,29 @@ describe("badgeValue (#106)", () => {
       });
       expect(badgeValue(h, { entity: "light.office", readings: [{ entity: "sensor.raw" }] }))
         .toBe("128lx");
+    });
+
+    it.each([
+      { entity: "sensor.raw", attribute: "brightness" },
+      { entity: "light.office", readings: [{ entity: "sensor.raw", attribute: "brightness" }], badgeEntity: 0 },
+    ])("keeps another domain's brightness attribute raw (%j)", (item) => {
+      const h = hass({
+        "light.office": { state: "on", attributes: { brightness: 255 } },
+        "sensor.raw": { state: "unavailable", attributes: { brightness: 128 } },
+      });
+      expect(badgeValue(h, item)).toBe("128");
+    });
+
+    it("uses the reading entity's light domain even when the device is a sensor", () => {
+      const h = hass({
+        "sensor.raw": { state: "unavailable", attributes: {} },
+        "light.office": { state: "on", attributes: { brightness: 128 } },
+      });
+      expect(badgeValue(h, {
+        entity: "sensor.raw",
+        readings: [{ entity: "light.office", attribute: "brightness" }],
+        badgeEntity: 0,
+      })).toBe("50%");
     });
 
     it("leaves a non-brightness badge reading alone", () => {

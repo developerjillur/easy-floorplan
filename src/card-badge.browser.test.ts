@@ -190,8 +190,8 @@ describe("a light's brightness badge reads percent, on the card too (issue #359)
       .toBe("100%");
   });
 
-  it("falls back to the plain icon while the light is off", async () => {
-    const t = await mountLight({ state: "off", attributes: {} });
+  it.each([{}, { brightness: null }])("falls back to the icon for an off light with no numeric brightness (%j)", async (attributes) => {
+    const t = await mountLight({ state: "off", attributes });
     expect(t.badgeValue()).toBeUndefined();
     expect(t.badgeIcon()).toBeTruthy();
   });
