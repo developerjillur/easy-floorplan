@@ -115,10 +115,8 @@ describe("editing floor destinations", () => {
     editor.requestUpdate();
     await editor.updateComplete;
     const root = editor.shadowRoot!;
-    const group = [...root.querySelectorAll<HTMLButtonElement>(".cfg-group-title")]
-      .find((b) => b.textContent?.trim().startsWith("Behavior"))!;
-    group.click();
-    await editor.updateComplete;
+    // "Go to floor" is an essential field on the object's Properties page,
+    // which the fresh selection opens on, so no category tab needs clicking.
     const select = () => [...root.querySelectorAll<HTMLSelectElement>("select")]
       .find((s) => s.parentElement?.querySelector("label")?.textContent === "Go to floor")!;
     expect([...select().options].map((o) => o.value)).toContain(`floor:${c.floors![2].id}`);
