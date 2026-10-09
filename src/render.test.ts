@@ -2736,7 +2736,7 @@ describe("badgeValue (#106)", () => {
       entity: "light.office",
       readings: [{ attribute: "brightness" }],
       badgeEntity: 0,
-    } as const;
+    };
 
     it("shows the issue's config as a percentage, not 0-255", () => {
       expect(badgeValue(light(128), issueItem)).toBe("50%");
