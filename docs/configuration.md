@@ -291,8 +291,10 @@ See [Skylights](lighting.md#skylights) for what the sun does with one and
 | `hide*` / `hideBadge*` / `hideState*` | — | — | Twenty-four keys that hide the device, its badge or its label from a second entity's state. Documented in full under [Advanced Hiding Logic](behavior.md#advanced-hiding-logic); the editor groups them under **Visibility**. |
 
 A light's `brightness` reading uses a rounded percentage in a value badge,
-matching the label (`128` becomes `50%`). Missing or null brightness keeps the
-icon fallback. A `brightness` attribute from another entity domain stays raw.
+matching the label (`128` becomes `50%`). An explicitly selected brightness
+reading falls back to the icon when absent or null. Automatic selection may
+choose another numeric reading. A `brightness` attribute from another entity
+domain stays raw.
 
 ### Cast light
 
